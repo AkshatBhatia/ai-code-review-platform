@@ -17,7 +17,7 @@ export default function LazyLoginDialog({
 }) {
   const {hostname} = window.location;
   const LoginComponent =
-    hostname === 'reviewstack.netlify.app' || hostname === 'reviewstack.dev'
+    hostname === 'reviewstack.netlify.app' || hostname === 'reviewstack.dev' || hostname === 'ai-code-review-interview.netlify.app'
       ? NetlifyLoginDialog
       : DefaultLoginDialog;
 

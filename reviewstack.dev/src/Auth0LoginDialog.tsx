@@ -92,7 +92,11 @@ function EndUserInstructions(props: CustomLoginDialogProps): React.ReactElement 
     setErrorMessage(null);
     
     try {
-      await loginWithPopup();
+      await loginWithPopup({
+        authorizationParams: {
+          connection: 'github'
+        }
+      });
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Auth0 login failed';
       setErrorMessage(message);
@@ -100,14 +104,59 @@ function EndUserInstructions(props: CustomLoginDialogProps): React.ReactElement 
     }
   };
 
-  // Show GitHub token info if authenticated
+  // Extract GitHub token when authenticated
   useEffect(() => {
     if (isAuthenticated && user) {
-      // For now, show instructions to get GitHub token manually
-      // In production, this would be configured to get GitHub token from Auth0
-      setErrorMessage('Authentication successful! For now, please use the manual token entry below to connect to GitHub.');
+      extractGitHubToken();
     }
   }, [isAuthenticated, user]);
+
+  const extractGitHubToken = async () => {
+    try {
+      // Debug: log user object to console
+      console.log('Auth0 User Object:', user);
+      console.log('User identities:', user?.identities);
+      
+      // Try to get GitHub token from user identities
+      const githubIdentity = user?.identities?.find((identity: any) => identity.provider === 'github');
+      console.log('GitHub identity:', githubIdentity);
+      
+      const githubToken = githubIdentity?.access_token;
+      
+      if (githubToken) {
+        // Success! We got the GitHub token
+        console.log('Found GitHub token from identity');
+        setTokenAndHostname(githubToken, 'github.com');
+        return;
+      }
+      
+      // Try to get access token with GitHub audience
+      try {
+        const token = await getAccessTokenSilently({
+          authorizationParams: {
+            audience: 'https://api.github.com',
+            scope: 'user:email repo'
+          }
+        });
+        console.log('Got token with GitHub audience:', token ? 'yes' : 'no');
+        
+        if (token) {
+          setTokenAndHostname(token, 'github.com');
+          return;
+        }
+      } catch (audienceError) {
+        console.log('Failed to get token with GitHub audience:', audienceError);
+      }
+      
+      // If no token found, show manual entry message
+      setErrorMessage('GitHub token not found in Auth0 response. Check browser console for details. Please use manual token entry below.');
+      
+    } catch (e) {
+      console.error('Error extracting GitHub token:', e);
+      const message = e instanceof Error ? e.message : 'Failed to extract GitHub token from Auth0';
+      setErrorMessage(`${message}. Please use manual token entry below.`);
+    }
+  };
 
   return (
     <Box>

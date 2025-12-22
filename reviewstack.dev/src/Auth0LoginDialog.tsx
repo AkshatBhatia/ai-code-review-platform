@@ -121,55 +121,29 @@ function EndUserInstructions(props: CustomLoginDialogProps): React.ReactElement 
       const githubIdentity = user?.identities?.find((identity: any) => identity.provider === 'github');
       console.log('GitHub identity:', githubIdentity);
       
-      // Also check for custom claims where identities might be stored
-      const customIdentities = user?.['https://reviewstack.dev/identities'];
-      console.log('Custom identities claim:', customIdentities);
+      // Check for GitHub token in custom claims (from our Auth0 Action)
+      const githubTokenFromClaim = user?.['github_access_token'];
+      const githubUserFromClaim = user?.['github_user'];
+      console.log('GitHub token from custom claim:', githubTokenFromClaim ? 'yes' : 'no');
+      console.log('GitHub user from custom claim:', githubUserFromClaim);
       
-      let githubToken = githubIdentity?.access_token;
+      let githubToken = githubIdentity?.access_token || githubTokenFromClaim;
       
-      // If no token in main identities, check custom claims
-      if (!githubToken && customIdentities) {
-        const customGithubIdentity = customIdentities.find((identity: any) => identity.provider === 'github');
-        githubToken = customGithubIdentity?.access_token;
-        console.log('Found token in custom claims:', githubToken ? 'yes' : 'no');
+      // Debug: show token type
+      if (githubToken) {
+        console.log('GitHub token type:', githubToken.startsWith('gho_') ? 'GitHub OAuth' : 
+                   githubToken.startsWith('ghp_') ? 'GitHub PAT' : 
+                   githubToken.startsWith('eyJ') ? 'JWT (wrong!)' : 'Unknown');
+        console.log('GitHub token (first 10 chars):', githubToken.substring(0, 10));
       }
       
-      if (githubToken) {
-        // Success! We got the GitHub token
-        console.log('Found GitHub token from identity');
+      if (githubToken && !githubToken.startsWith('eyJ')) {
+        // Success! We got a real GitHub token (not a JWT)
+        console.log('✅ Using GitHub token for authentication');
         setTokenAndHostname(githubToken, 'github.com');
         return;
-      }
-      
-      // Try to get access token without specific audience first
-      try {
-        const token = await getAccessTokenSilently();
-        console.log('Got general access token:', token ? 'yes' : 'no');
-        
-        if (token) {
-          // This is likely an Auth0 token, not a GitHub token, but let's see what we get
-          console.log('General token (first 20 chars):', token.substring(0, 20));
-        }
-      } catch (generalError) {
-        console.log('Failed to get general token:', generalError);
-      }
-
-      // Try to get access token with GitHub audience (after creating API in Auth0)
-      try {
-        const token = await getAccessTokenSilently({
-          authorizationParams: {
-            audience: 'https://api.github.com',
-            scope: 'user:email repo'
-          }
-        });
-        console.log('Got token with GitHub audience:', token ? 'yes' : 'no');
-        
-        if (token) {
-          setTokenAndHostname(token, 'github.com');
-          return;
-        }
-      } catch (audienceError) {
-        console.log('Failed to get token with GitHub audience:', audienceError);
+      } else if (githubToken && githubToken.startsWith('eyJ')) {
+        console.log('❌ Got JWT token instead of GitHub token - Auth0 Action may not be working');
       }
       
       // If no token found, show manual entry message

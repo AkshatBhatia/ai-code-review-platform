@@ -19,8 +19,8 @@ import Link from 'reviewstack/src/Link';
  * Uses Auth0 for authentication instead of deprecated Netlify Identity
  */
 export default function Auth0LoginDialog(props: CustomLoginDialogProps): React.ReactElement {
-  const domain = process.env.REACT_APP_AUTH0_DOMAIN;
-  const clientId = process.env.REACT_APP_AUTH0_CLIENT_ID;
+  const domain = process.env.REACT_APP_AUTH0_DOMAIN || process.env.AUTH0_DOMAIN;
+  const clientId = process.env.REACT_APP_AUTH0_CLIENT_ID || process.env.AUTH0_CLIENT_ID;
   
   // Debug: log available env vars (remove in production)
   console.log('Auth0 Env Vars:', {

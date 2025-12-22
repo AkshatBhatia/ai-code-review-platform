@@ -22,8 +22,16 @@ export default function Auth0LoginDialog(props: CustomLoginDialogProps): React.R
   const domain = process.env.REACT_APP_AUTH0_DOMAIN;
   const clientId = process.env.REACT_APP_AUTH0_CLIENT_ID;
   
+  // Debug: log available env vars (remove in production)
+  console.log('Auth0 Env Vars:', {
+    domain,
+    clientId,
+    allEnvVars: Object.keys(process.env).filter(key => key.includes('AUTH0'))
+  });
+  
   if (!domain || !clientId) {
-    return <ErrorMessage message="Auth0 configuration missing. Please check environment variables." {...props} />;
+    const message = `Auth0 configuration missing. Available AUTH0 env vars: ${Object.keys(process.env).filter(key => key.includes('AUTH0')).join(', ') || 'none'}`;
+    return <ErrorMessage message={message} {...props} />;
   }
 
   return (

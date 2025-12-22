@@ -130,7 +130,20 @@ function EndUserInstructions(props: CustomLoginDialogProps): React.ReactElement 
         return;
       }
       
-      // Try to get access token with GitHub audience
+      // Try to get access token without specific audience first
+      try {
+        const token = await getAccessTokenSilently();
+        console.log('Got general access token:', token ? 'yes' : 'no');
+        
+        if (token) {
+          // This is likely an Auth0 token, not a GitHub token, but let's see what we get
+          console.log('General token (first 20 chars):', token.substring(0, 20));
+        }
+      } catch (generalError) {
+        console.log('Failed to get general token:', generalError);
+      }
+
+      // Try to get access token with GitHub audience (after creating API in Auth0)
       try {
         const token = await getAccessTokenSilently({
           authorizationParams: {

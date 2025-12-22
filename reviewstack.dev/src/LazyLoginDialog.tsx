@@ -8,7 +8,7 @@
 import React, {Suspense} from 'react';
 
 const DefaultLoginDialog = React.lazy(() => import('./DefaultLoginDialog'));
-const NetlifyLoginDialog = React.lazy(() => import('./NetlifyLoginDialog'));
+const Auth0LoginDialog = React.lazy(() => import('./Auth0LoginDialog'));
 
 export default function LazyLoginDialog({
   setTokenAndHostname,
@@ -16,10 +16,9 @@ export default function LazyLoginDialog({
   setTokenAndHostname: (token: string, hostname: string) => void;
 }) {
   const {hostname} = window.location;
-  const LoginComponent =
-    hostname === 'reviewstack.netlify.app' || hostname === 'reviewstack.dev' || hostname === 'ai-code-review-interview.netlify.app'
-      ? NetlifyLoginDialog
-      : DefaultLoginDialog;
+  const LoginComponent = hostname.includes('.netlify.app') 
+    ? Auth0LoginDialog 
+    : DefaultLoginDialog;
 
   return (
     <div>

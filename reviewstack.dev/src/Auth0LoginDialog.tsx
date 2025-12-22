@@ -121,7 +121,18 @@ function EndUserInstructions(props: CustomLoginDialogProps): React.ReactElement 
       const githubIdentity = user?.identities?.find((identity: any) => identity.provider === 'github');
       console.log('GitHub identity:', githubIdentity);
       
-      const githubToken = githubIdentity?.access_token;
+      // Also check for custom claims where identities might be stored
+      const customIdentities = user?.['https://reviewstack.dev/identities'];
+      console.log('Custom identities claim:', customIdentities);
+      
+      let githubToken = githubIdentity?.access_token;
+      
+      // If no token in main identities, check custom claims
+      if (!githubToken && customIdentities) {
+        const customGithubIdentity = customIdentities.find((identity: any) => identity.provider === 'github');
+        githubToken = customGithubIdentity?.access_token;
+        console.log('Found token in custom claims:', githubToken ? 'yes' : 'no');
+      }
       
       if (githubToken) {
         // Success! We got the GitHub token

@@ -1,0 +1,25 @@
+[build]
+  # Directory where the built files are located
+  publish = "reviewstack.dev/build"
+  
+  # Build command (adjust if needed)
+  command = "cd reviewstack.dev && npm run build"
+  
+  # Directory with Netlify Functions
+  functions = "netlify/functions"
+
+# Environment variables that should be available during build
+[build.environment]
+  NODE_VERSION = "18"
+
+# Redirect rules (backup to _redirects file)
+[[redirects]]
+  from = "/.netlify/functions/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+

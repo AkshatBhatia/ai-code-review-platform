@@ -55,9 +55,9 @@ export default function GitHubOAuthCallback(): React.ReactElement {
       if (tokenData.access_token) {
         console.log('✅ Successfully got GitHub access token');
         
-        // Store token in localStorage
-        localStorage.setItem('github_token', tokenData.access_token);
-        localStorage.setItem('github_hostname', 'github.com');
+        // Store token in localStorage using ReviewStack's expected keys
+        localStorage.setItem('github.token', tokenData.access_token);
+        localStorage.setItem('github.hostname', 'github.com');
         
         // Redirect to home page
         window.location.href = '/';

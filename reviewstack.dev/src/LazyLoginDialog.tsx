@@ -8,7 +8,7 @@
 import React, {Suspense} from 'react';
 
 const DefaultLoginDialog = React.lazy(() => import('./DefaultLoginDialog'));
-const Auth0LoginDialog = React.lazy(() => import('./Auth0LoginDialog'));
+const DirectGitHubLoginDialog = React.lazy(() => import('./DirectGitHubLoginDialog'));
 
 export default function LazyLoginDialog({
   setTokenAndHostname,
@@ -17,7 +17,7 @@ export default function LazyLoginDialog({
 }) {
   const {hostname} = window.location;
   const LoginComponent = hostname.includes('.netlify.app') 
-    ? Auth0LoginDialog 
+    ? DirectGitHubLoginDialog 
     : DefaultLoginDialog;
 
   return (

@@ -1,6 +1,4 @@
-# Netlify Functions (must be first to not be caught by SPA rule)
-/.netlify/functions/*  /.netlify/functions/:splat  200
-
 # SPA fallback - serve index.html for all routes
+# This allows React Router to handle client-side routing
 /*  /index.html  200
 

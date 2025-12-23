@@ -2,8 +2,8 @@
   # Directory where the built files are located
   publish = "reviewstack.dev/build"
   
-  # Build command (adjust if needed)
-  command = "cd reviewstack.dev && npm run build"
+  # Build command - run codegen first, then build
+  command = "yarn workspace reviewstack run codegen && yarn workspace reviewstack.dev run build"
   
   # Directory with Netlify Functions
   functions = "netlify/functions"
@@ -12,12 +12,7 @@
 [build.environment]
   NODE_VERSION = "18"
 
-# Redirect rules (backup to _redirects file)
-[[redirects]]
-  from = "/.netlify/functions/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
-
+# Redirect rules - SPA fallback for client-side routing
 [[redirects]]
   from = "/*"
   to = "/index.html"

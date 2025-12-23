@@ -37,6 +37,7 @@ export default function GitHubOAuthCallback(): React.ReactElement {
   const handleOAuthCallback = async (code: string) => {
     try {
       // Exchange authorization code for access token
+      console.log('Exchanging authorization code for access token...');
       const tokenResponse = await fetch('/.netlify/functions/github-oauth', {
         method: 'POST',
         headers: {

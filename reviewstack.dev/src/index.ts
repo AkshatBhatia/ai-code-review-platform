@@ -16,6 +16,8 @@ export {
   ThemeProvider,
 } from 'reviewstack/src/index';
 
+export {default as GitHubOAuthCallback} from './GitHubOAuthCallback';
+
 export function configureLoginDialog() {
   setCustomLoginDialogComponent(LazyLoginDialog);
 }

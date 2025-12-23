@@ -128,6 +128,10 @@
           });
         }
 
+        function GitHubOAuthCallbackPage() {
+          return React.createElement(ReviewStack.GitHubOAuthCallback);
+        }
+
         const container = document.getElementById('root');
         const root = ReactDOM.createRoot(container);
         root.render(
@@ -154,7 +158,7 @@
                     }),
                     React.createElement(ReactRouterDOM.Route, {
                       path: '/auth/callback',
-                      element: React.createElement(LandingPage),
+                      element: React.createElement(GitHubOAuthCallbackPage),
                     }),
                     React.createElement(ReactRouterDOM.Route, {
                       path: '/:org/:repo',

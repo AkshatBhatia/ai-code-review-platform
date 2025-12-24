@@ -4,3 +4,6 @@ build/
 *.log
 .env
 .env.local
+
+# Claude's development token - keep local only
+.github-token

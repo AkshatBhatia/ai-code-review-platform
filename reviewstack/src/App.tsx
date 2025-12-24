@@ -17,7 +17,11 @@ import PullRequestLayout from './PullRequestLayout';
 import PullsView from './PullsView';
 import SplitDiffViewPrimerStyles from './SplitDiffViewPrimerStyles';
 import UserHomePage from './UserHomePage';
+import RoleSelectionDialog from './RoleSelectionDialog';
+import InterviewerDashboard from './InterviewerDashboard';
+import CandidateInterface from './CandidateInterface';
 import {gitHubTokenPersistence} from './github/gitHubCredentials';
+import {interviewUserRole, isInterviewUserAuthenticated} from './interviewState';
 import {primerColorMode} from './themeState';
 import {BaseStyles, Box, Text, useTheme} from '@primer/react';
 import React, {useEffect} from 'react';
@@ -71,20 +75,35 @@ export default function App({page}: {page: Page}): React.ReactElement {
 
 function ContentOrLoginDialog({page}: {page: Page}): React.ReactElement {
   const tokenLoadable = useRecoilValueLoadable(gitHubTokenPersistence);
+  const userRole = useRecoilValue(interviewUserRole);
+  const isAuthenticated = useRecoilValue(isInterviewUserAuthenticated);
   const orgAndRepo = page.type !== 'home' ? {org: page.org, repo: page.repo} : null;
+  
   switch (tokenLoadable.state) {
     case 'hasValue': {
       const {contents: token} = tokenLoadable;
-      return token != null ? (
-        <>
-          <AppHeader orgAndRepo={orgAndRepo} />
+      
+      // No GitHub token -> show login
+      if (token == null) {
+        return <LoginDialog />;
+      }
+      
+      // Has GitHub token but no role -> show role selection
+      if (userRole == null) {
+        return <RoleSelectionDialog />;
+      }
+      
+      // Fully authenticated -> show appropriate interface based on role
+      if (isAuthenticated) {
+        return (
           <ErrorBoundary>
-            <AppContent page={page} />
+            <InterviewContent userRole={userRole} page={page} orgAndRepo={orgAndRepo} />
           </ErrorBoundary>
-        </>
-      ) : (
-        <LoginDialog />
-      );
+        );
+      }
+      
+      // Fallback to login if something went wrong
+      return <LoginDialog />;
     }
     case 'loading': {
       return (
@@ -124,6 +143,52 @@ const ThemeListener = React.memo(function ThemeListener(): React.ReactElement {
   }, [colorMode, setColorMode]);
   return <></>;
 });
+
+/**
+ * Routes content based on user role and page type
+ */
+function InterviewContent({
+  userRole,
+  page,
+  orgAndRepo
+}: {
+  userRole: 'interviewer' | 'candidate';
+  page: Page;
+  orgAndRepo: {org: string; repo: string} | null;
+}): React.ReactElement {
+  // For interviewers, show dashboard by default, but allow access to ReviewStack
+  if (userRole === 'interviewer') {
+    // If accessing specific GitHub content, show original ReviewStack interface
+    if (page.type !== 'home') {
+      return (
+        <>
+          <AppHeader orgAndRepo={orgAndRepo} />
+          <AppContent page={page} />
+        </>
+      );
+    }
+    // Otherwise show interviewer dashboard
+    return <InterviewerDashboard />;
+  }
+  
+  // For candidates, show candidate interface by default
+  if (userRole === 'candidate') {
+    // If in an active interview session accessing specific GitHub content, show ReviewStack
+    if (page.type !== 'home') {
+      return (
+        <>
+          <AppHeader orgAndRepo={orgAndRepo} />
+          <AppContent page={page} />
+        </>
+      );
+    }
+    // Otherwise show candidate interface
+    return <CandidateInterface />;
+  }
+  
+  // Fallback
+  return <InterviewerDashboard />;
+}
 
 const AppContent = React.memo(({page}: {page: Page}): React.ReactElement => {
   switch (page.type) {

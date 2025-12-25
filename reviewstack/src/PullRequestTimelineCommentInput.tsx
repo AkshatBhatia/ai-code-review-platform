@@ -10,8 +10,8 @@ import PullRequestReviewSelector from './PullRequestReviewSelector';
 import {PullRequestReviewEvent} from './generated/graphql';
 import {gitHubClient, gitHubPullRequest, gitHubPullRequestPendingReviewID} from './recoil';
 import {gitHubUsername} from './github/gitHubCredentials';
-import useRefreshPullRequest from './useRefreshPullRequest';
 import {timelineScrollToBottom} from './PullRequestLayout';
+import useRefreshPullRequest from './useRefreshPullRequest';
 import {useState} from 'react';
 import {useRecoilCallback, useRecoilValue} from 'recoil';
 
@@ -67,18 +67,23 @@ export default function PullRequestTimelineCommentInput(): React.ReactElement {
         }
 
         try {
+          console.log('🚀 Starting API call for timeline comment...');
+          let result;
+          
           if (pendingReviewID == null) {
             if (event === PullRequestReviewEvent.Comment) {
-              await client.addComment(pullRequest.id, comment);
+              result = await client.addComment(pullRequest.id, comment);
             } else {
-              await client.addPullRequestReview({
+              result = await client.addPullRequestReview({
                 body: comment,
                 pullRequestId: pullRequest.id,
                 event,
               });
             }
           } else {
-            await client.submitPullRequestReview({
+            // For merged/closed PRs, we still need to submit the pending review
+            // Don't convert to regular comments - just submit the review normally
+            result = await client.submitPullRequestReview({
               body: comment,
               pullRequestId: pullRequest.id,
               pullRequestReviewId: pendingReviewID,
@@ -86,10 +91,12 @@ export default function PullRequestTimelineCommentInput(): React.ReactElement {
             });
           }
 
-          // Success: refresh to get authoritative data (server IDs, timestamps)
+          console.log('✅ API call succeeded for timeline comment');
+          
+          // Refresh pull request data to update pending review status
           refreshPullRequest();
           
-          // Trigger scroll to bottom after refresh to ensure the comment is visible
+          // Trigger scroll to bottom after server update to ensure the comment is visible
           set(timelineScrollToBottom, Date.now());
         } catch (error) {
           // Rollback optimistic update on failure

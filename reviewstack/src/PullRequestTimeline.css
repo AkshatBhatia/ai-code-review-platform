@@ -33,3 +33,27 @@
 .PRT-actor-basic {
   font-weight: bold;
 }
+
+.PRT-bodyHTML {
+  word-break: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+
+.PRT-bodyHTML * {
+  word-break: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+
+.snippet-clipboard-content {
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+  overflow: visible !important;
+}
+
+.snippet-clipboard-content pre {
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+}

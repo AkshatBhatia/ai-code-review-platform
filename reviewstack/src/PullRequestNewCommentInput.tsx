@@ -6,7 +6,7 @@
  */
 
 import PullRequestCommentInput from './PullRequestCommentInput';
-import {DiffSide} from './generated/graphql';
+import {DiffSide, PullRequestReviewCommentState} from './generated/graphql';
 import {
   gitHubClient,
   gitHubPullRequest,
@@ -14,6 +14,7 @@ import {
   gitHubPullRequestNewCommentInputCell,
   gitHubPullRequestPositionForLine,
 } from './recoil';
+import {gitHubUsername} from './github/gitHubCredentials';
 import useRefreshPullRequest from './useRefreshPullRequest';
 import {Box, Text} from '@primer/react';
 import {useRecoilCallback, useResetRecoilState} from 'recoil';
@@ -28,16 +29,16 @@ export default function PullRequestNewCommentInput({line, path, side}: Props): R
   const onCancel = useResetRecoilState(gitHubPullRequestNewCommentInputCell);
   const refreshPullRequest = useRefreshPullRequest();
   const addComment = useRecoilCallback<[string], Promise<void>>(
-    ({snapshot}) =>
+    ({snapshot, set}) =>
       async comment => {
         const client = snapshot.getLoadable(gitHubClient).valueMaybe();
         if (client == null) {
           return Promise.reject('client not found');
         }
 
-        const pullRequestId = snapshot.getLoadable(gitHubPullRequest).valueMaybe()?.id;
-        if (pullRequestId == null) {
-          return Promise.reject('pull request id not found');
+        const pullRequest = snapshot.getLoadable(gitHubPullRequest).valueMaybe();
+        if (pullRequest == null) {
+          return Promise.reject('pull request not found');
         }
 
         const comparableVersions = snapshot
@@ -58,19 +59,79 @@ export default function PullRequestNewCommentInput({line, path, side}: Props): R
           return Promise.reject('positionForLine not found');
         }
 
-        await client.addPullRequestReviewComment({
-          body: comment,
-          commitOID: commitID,
+        const usernameLoadable = snapshot.getLoadable(gitHubUsername);
+        const username = usernameLoadable.state === 'hasValue' ? usernameLoadable.contents : 'unknown';
+
+        // Create optimistic comment for UI
+        const optimisticComment = {
+          __typename: 'PullRequestReviewComment' as const,
+          id: `temp_${Date.now()}`,
+          author: {
+            __typename: 'User' as const,
+            id: `temp_user_${Date.now()}`,
+            login: username || 'unknown',
+            avatarUrl: `https://github.com/${username || 'unknown'}.png`,
+          },
+          originalCommit: {
+            __typename: 'Commit' as const,
+            oid: commitID,
+          },
           path,
+          state: PullRequestReviewCommentState.Submitted,
+          outdated: false,
+          originalPosition: position,
           position,
-          pullRequestId,
-        });
+          bodyHTML: `<p>${comment}</p>`,
+          replyTo: null,
+          commit: {
+            __typename: 'Commit' as const,
+            oid: commitID,
+          },
+        };
+
+        // Create optimistic review thread
+        const optimisticThread = {
+          __typename: 'PullRequestReviewThread' as const,
+          id: `temp_thread_${Date.now()}`,
+          originalLine: line,
+          diffSide: side,
+          comments: {
+            __typename: 'PullRequestReviewCommentConnection' as const,
+            nodes: [optimisticComment],
+          },
+        };
+
+        // Add optimistic comment to UI immediately
+        const updatedPullRequest = {
+          ...pullRequest,
+          reviewThreads: {
+            ...pullRequest.reviewThreads,
+            nodes: [...(pullRequest.reviewThreads.nodes ?? []), optimisticThread],
+          },
+        };
+        set(gitHubPullRequest, updatedPullRequest);
 
         // Note that onCancel() will reset gitHubPullRequestNewCommentInputCell
         // to null, which will result in this component being removed from the
         // DOM.
         onCancel();
-        refreshPullRequest();
+
+        try {
+          await client.addPullRequestReviewComment({
+            body: comment,
+            commitOID: commitID,
+            path,
+            position,
+            pullRequestId: pullRequest.id,
+          });
+
+          // Success: refresh to get authoritative data (server IDs, timestamps)
+          refreshPullRequest();
+        } catch (error) {
+          // Rollback optimistic update on failure
+          set(gitHubPullRequest, pullRequest);
+          throw error;
+        }
       },
     [line, onCancel, path, refreshPullRequest, side],
   );

@@ -9,6 +9,7 @@ import PullRequestCommentInput from './PullRequestCommentInput';
 import PullRequestReviewSelector from './PullRequestReviewSelector';
 import {PullRequestReviewEvent} from './generated/graphql';
 import {gitHubClient, gitHubPullRequest, gitHubPullRequestPendingReviewID} from './recoil';
+import {gitHubUsername} from './github/gitHubCredentials';
 import useRefreshPullRequest from './useRefreshPullRequest';
 import {useState} from 'react';
 import {useRecoilCallback, useRecoilValue} from 'recoil';
@@ -18,7 +19,7 @@ export default function PullRequestTimelineCommentInput(): React.ReactElement {
   const refreshPullRequest = useRefreshPullRequest();
   const [event, setEvent] = useState(PullRequestReviewEvent.Comment);
   const addComment = useRecoilCallback<[string], Promise<void>>(
-    ({snapshot}) =>
+    ({snapshot, set}) =>
       async comment => {
         const clientLoadable = snapshot.getLoadable(gitHubClient);
         if (clientLoadable.state !== 'hasValue' || clientLoadable.contents == null) {
@@ -32,26 +33,65 @@ export default function PullRequestTimelineCommentInput(): React.ReactElement {
         }
         const pullRequest = pullRequestLoadable.contents;
 
-        if (pendingReviewID == null) {
-          if (event === PullRequestReviewEvent.Comment) {
-            await client.addComment(pullRequest.id, comment);
+        const usernameLoadable = snapshot.getLoadable(gitHubUsername);
+        const username = usernameLoadable.state === 'hasValue' ? usernameLoadable.contents : 'unknown';
+
+        // Create optimistic comment for UI
+        const optimisticComment = {
+          __typename: 'IssueComment' as const,
+          id: `temp_${Date.now()}`,
+          author: {
+            __typename: 'User' as const,
+            id: `temp_user_${Date.now()}`,
+            login: username || 'unknown',
+            avatarUrl: `https://github.com/${username || 'unknown'}.png`,
+          },
+          bodyHTML: `<p>${comment}</p>`,
+          createdAt: new Date().toISOString() as any,
+        };
+
+        // Add optimistic comment to UI immediately (only for simple comments)
+        if (pendingReviewID == null && event === PullRequestReviewEvent.Comment) {
+          const updatedPullRequest = {
+            ...pullRequest,
+            timelineItems: {
+              ...pullRequest.timelineItems,
+              nodes: [...(pullRequest.timelineItems.nodes ?? []), optimisticComment],
+            },
+          };
+          set(gitHubPullRequest, updatedPullRequest);
+        }
+
+        try {
+          if (pendingReviewID == null) {
+            if (event === PullRequestReviewEvent.Comment) {
+              await client.addComment(pullRequest.id, comment);
+            } else {
+              await client.addPullRequestReview({
+                body: comment,
+                pullRequestId: pullRequest.id,
+                event,
+              });
+            }
           } else {
-            await client.addPullRequestReview({
+            await client.submitPullRequestReview({
               body: comment,
               pullRequestId: pullRequest.id,
+              pullRequestReviewId: pendingReviewID,
               event,
             });
           }
-        } else {
-          await client.submitPullRequestReview({
-            body: comment,
-            pullRequestId: pullRequest.id,
-            pullRequestReviewId: pendingReviewID,
-            event,
-          });
+
+          // Success: refresh to get authoritative data (server IDs, timestamps)
+          refreshPullRequest();
+        } catch (error) {
+          // Rollback optimistic update on failure
+          if (pendingReviewID == null && event === PullRequestReviewEvent.Comment) {
+            set(gitHubPullRequest, pullRequest);
+          }
+          throw error;
         }
 
-        refreshPullRequest();
         setEvent(PullRequestReviewEvent.Comment);
       },
     [event, pendingReviewID, refreshPullRequest],

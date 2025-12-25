@@ -6,7 +6,7 @@
  */
 
 import PullRequestCommentInput from './PullRequestCommentInput';
-import {DiffSide, PullRequestReviewCommentState} from './generated/graphql';
+import {DiffSide, PullRequestReviewCommentState, PullRequestReviewState} from './generated/graphql';
 import {
   gitHubClient,
   gitHubPullRequest,
@@ -14,10 +14,89 @@ import {
   gitHubPullRequestNewCommentInputCell,
   gitHubPullRequestPositionForLine,
 } from './recoil';
+import {timelineScrollToBottom} from './PullRequestLayout';
 import {gitHubUsername} from './github/gitHubCredentials';
-import useRefreshPullRequest from './useRefreshPullRequest';
 import {Box, Text} from '@primer/react';
 import {useRecoilCallback, useResetRecoilState} from 'recoil';
+import type {PullRequestReviewCommentFragment} from './generated/graphql';
+import type {PullRequest} from './github/pullRequestTimelineTypes';
+
+/**
+ * Updates an optimistic comment with server data in place, preserving the visual state
+ * while replacing temporary IDs and data with authoritative server information.
+ */
+function updateOptimisticCommentWithServerData(
+  pullRequest: PullRequest,
+  optimisticCommentId: string,
+  serverComment: PullRequestReviewCommentFragment
+): PullRequest {
+  // Create a deep copy to avoid mutating the original
+  const updatedPullRequest = {...pullRequest};
+  
+  // Update the comment in reviewThreads
+  if (updatedPullRequest.reviewThreads?.nodes) {
+    updatedPullRequest.reviewThreads = {
+      ...updatedPullRequest.reviewThreads,
+      nodes: updatedPullRequest.reviewThreads.nodes.map(thread => {
+        if (thread?.comments?.nodes) {
+          const hasOptimisticComment = thread.comments.nodes.some(
+            comment => comment?.id === optimisticCommentId
+          );
+          
+          if (hasOptimisticComment) {
+            return {
+              ...thread,
+              comments: {
+                ...thread.comments,
+                nodes: thread.comments.nodes.map(comment => {
+                  if (comment?.id === optimisticCommentId) {
+                    // Replace optimistic comment with server data
+                    return serverComment;
+                  }
+                  return comment;
+                }),
+              },
+            };
+          }
+        }
+        return thread;
+      }),
+    };
+  }
+  
+  // Update the comment in timeline items
+  if (updatedPullRequest.timelineItems?.nodes) {
+    updatedPullRequest.timelineItems = {
+      ...updatedPullRequest.timelineItems,
+      nodes: updatedPullRequest.timelineItems.nodes.map(item => {
+        if (item?.__typename === 'PullRequestReview' && item.comments?.nodes) {
+          const hasOptimisticComment = item.comments.nodes.some(
+            comment => comment?.id === optimisticCommentId
+          );
+          
+          if (hasOptimisticComment) {
+            return {
+              ...item,
+              comments: {
+                ...item.comments,
+                nodes: item.comments.nodes.map(comment => {
+                  if (comment?.id === optimisticCommentId) {
+                    // Replace optimistic comment with server data
+                    return serverComment;
+                  }
+                  return comment;
+                }),
+              },
+            };
+          }
+        }
+        return item;
+      }),
+    };
+  }
+  
+  return updatedPullRequest;
+}
 
 type Props = {
   line: number;
@@ -27,7 +106,6 @@ type Props = {
 
 export default function PullRequestNewCommentInput({line, path, side}: Props): React.ReactElement {
   const onCancel = useResetRecoilState(gitHubPullRequestNewCommentInputCell);
-  const refreshPullRequest = useRefreshPullRequest();
   const addComment = useRecoilCallback<[string], Promise<void>>(
     ({snapshot, set}) =>
       async comment => {
@@ -63,9 +141,10 @@ export default function PullRequestNewCommentInput({line, path, side}: Props): R
         const username = usernameLoadable.state === 'hasValue' ? usernameLoadable.contents : 'unknown';
 
         // Create optimistic comment for UI
+        const optimisticCommentId = `temp_${Date.now()}`;
         const optimisticComment = {
           __typename: 'PullRequestReviewComment' as const,
-          id: `temp_${Date.now()}`,
+          id: optimisticCommentId,
           author: {
             __typename: 'User' as const,
             id: `temp_user_${Date.now()}`,
@@ -101,15 +180,68 @@ export default function PullRequestNewCommentInput({line, path, side}: Props): R
           },
         };
 
-        // Add optimistic comment to UI immediately
+        // Find existing pending review or create a new one for the timeline
+        const existingPendingReview = (pullRequest.timelineItems.nodes ?? []).find(
+          item => item?.__typename === 'PullRequestReview' && item.state === PullRequestReviewState.Pending
+        );
+        
+        let timelineItems;
+        if (existingPendingReview && existingPendingReview.__typename === 'PullRequestReview') {
+          // Add comment to existing pending review
+          timelineItems = {
+            ...pullRequest.timelineItems,
+            nodes: (pullRequest.timelineItems.nodes ?? []).map(item => {
+              if (item === existingPendingReview && item.__typename === 'PullRequestReview') {
+                return {
+                  ...item,
+                  comments: {
+                    ...item.comments,
+                    nodes: [...(item.comments.nodes ?? []), optimisticComment],
+                  },
+                };
+              }
+              return item;
+            }),
+          };
+        } else {
+          // Create a new pending review timeline item
+          const optimisticReviewId = `temp_review_${Date.now()}`;
+          const optimisticReview = {
+            __typename: 'PullRequestReview' as const,
+            id: optimisticReviewId,
+            author: {
+              __typename: 'User' as const,
+              id: `temp_user_${Date.now()}`,
+              login: username || 'unknown',
+              avatarUrl: `https://github.com/${username || 'unknown'}.png`,
+            },
+            state: PullRequestReviewState.Pending,
+            bodyHTML: '',
+            comments: {
+              __typename: 'PullRequestReviewCommentConnection' as const,
+              nodes: [optimisticComment],
+            },
+          };
+          
+          timelineItems = {
+            ...pullRequest.timelineItems,
+            nodes: [...(pullRequest.timelineItems.nodes ?? []), optimisticReview],
+          };
+        }
+
+        // Add optimistic comment to UI immediately (both reviewThreads and timeline)
         const updatedPullRequest = {
           ...pullRequest,
           reviewThreads: {
             ...pullRequest.reviewThreads,
             nodes: [...(pullRequest.reviewThreads.nodes ?? []), optimisticThread],
           },
-        };
+          timelineItems,
+        } as PullRequest;
         set(gitHubPullRequest, updatedPullRequest);
+
+        // Trigger scroll to bottom to show the new comment in the right sidebar
+        set(timelineScrollToBottom, Date.now());
 
         // Note that onCancel() will reset gitHubPullRequestNewCommentInputCell
         // to null, which will result in this component being removed from the
@@ -117,7 +249,8 @@ export default function PullRequestNewCommentInput({line, path, side}: Props): R
         onCancel();
 
         try {
-          await client.addPullRequestReviewComment({
+          console.log('🚀 Starting API call for inline comment...');
+          const result = await client.addPullRequestReviewComment({
             body: comment,
             commitOID: commitID,
             path,
@@ -125,15 +258,36 @@ export default function PullRequestNewCommentInput({line, path, side}: Props): R
             pullRequestId: pullRequest.id,
           });
 
-          // Success: refresh to get authoritative data (server IDs, timestamps)
-          refreshPullRequest();
+          console.log('✅ API call succeeded, updating optimistic comment with server data...');
+          // Extract server comment data from the response
+          const serverComment = result.addPullRequestReviewComment?.comment;
+          
+          if (serverComment) {
+            // Update the optimistic comment with server data in place (no UI refresh)
+            const pullRequestWithServerData = updateOptimisticCommentWithServerData(
+              updatedPullRequest as PullRequest,
+              optimisticCommentId,
+              serverComment
+            );
+            
+            // Quietly update the state with server data - no visual change
+            set(gitHubPullRequest, pullRequestWithServerData);
+            
+            // Trigger scroll again to ensure the comment is visible after server update
+            set(timelineScrollToBottom, Date.now());
+            
+            console.log('🔄 Optimistic comment updated with server data (no refresh!)');
+          } else {
+            console.warn('⚠️ Server response missing comment data, keeping optimistic comment');
+          }
         } catch (error) {
           // Rollback optimistic update on failure
+          console.log('❌ API call failed, rolling back optimistic comment...');
           set(gitHubPullRequest, pullRequest);
           throw error;
         }
       },
-    [line, onCancel, path, refreshPullRequest, side],
+    [line, onCancel, path, side],
   );
 
   return (

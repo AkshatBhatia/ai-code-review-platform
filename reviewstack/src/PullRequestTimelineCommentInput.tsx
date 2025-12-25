@@ -11,6 +11,7 @@ import {PullRequestReviewEvent} from './generated/graphql';
 import {gitHubClient, gitHubPullRequest, gitHubPullRequestPendingReviewID} from './recoil';
 import {gitHubUsername} from './github/gitHubCredentials';
 import useRefreshPullRequest from './useRefreshPullRequest';
+import {timelineScrollToBottom} from './PullRequestLayout';
 import {useState} from 'react';
 import {useRecoilCallback, useRecoilValue} from 'recoil';
 
@@ -60,6 +61,9 @@ export default function PullRequestTimelineCommentInput(): React.ReactElement {
             },
           };
           set(gitHubPullRequest, updatedPullRequest);
+          
+          // Trigger scroll to bottom to show the new comment
+          set(timelineScrollToBottom, Date.now());
         }
 
         try {
@@ -84,6 +88,9 @@ export default function PullRequestTimelineCommentInput(): React.ReactElement {
 
           // Success: refresh to get authoritative data (server IDs, timestamps)
           refreshPullRequest();
+          
+          // Trigger scroll to bottom after refresh to ensure the comment is visible
+          set(timelineScrollToBottom, Date.now());
         } catch (error) {
           // Rollback optimistic update on failure
           if (pendingReviewID == null && event === PullRequestReviewEvent.Comment) {

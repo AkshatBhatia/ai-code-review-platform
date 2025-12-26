@@ -8,7 +8,7 @@
 import PullRequestCommentInput from './PullRequestCommentInput';
 import PullRequestReviewSelector from './PullRequestReviewSelector';
 import {PullRequestReviewEvent} from './generated/graphql';
-import {gitHubClient, gitHubPullRequest, gitHubPullRequestPendingReviewID} from './recoil';
+import {gitHubClient, gitHubPullRequest, gitHubPullRequestPendingReviewID, gitHubPullRequestHasPendingReview} from './recoil';
 import {gitHubUsername} from './github/gitHubCredentials';
 import {timelineScrollToBottom} from './PullRequestLayout';
 import useRefreshPullRequest from './useRefreshPullRequest';
@@ -17,6 +17,7 @@ import {useRecoilCallback, useRecoilValue} from 'recoil';
 
 export default function PullRequestTimelineCommentInput(): React.ReactElement {
   const pendingReviewID = useRecoilValue(gitHubPullRequestPendingReviewID);
+  const hasPendingReview = useRecoilValue(gitHubPullRequestHasPendingReview);
   const refreshPullRequest = useRefreshPullRequest();
   const [event, setEvent] = useState(PullRequestReviewEvent.Comment);
   const addComment = useRecoilCallback<[string], Promise<void>>(
@@ -70,7 +71,51 @@ export default function PullRequestTimelineCommentInput(): React.ReactElement {
           console.log('🚀 Starting API call for timeline comment...');
           let result;
           
-          if (pendingReviewID == null) {
+          // Check if we have any pending reviews (including optimistic ones)
+          if (hasPendingReview && pendingReviewID == null) {
+            // We have pending reviews but no real server ID yet (optimistic reviews)
+            // We need to refresh to get the real review ID, then submit
+            console.log('🔄 Refreshing to get real pending review ID before submit...');
+            refreshPullRequest();
+            
+            // Wait a bit for the refresh to complete, then try to get the real ID
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Get the fresh pending review ID after refresh
+            const freshPendingReviewID = snapshot.getLoadable(gitHubPullRequestPendingReviewID).valueMaybe();
+            
+            if (freshPendingReviewID) {
+              console.log('✅ Got real pending review ID, submitting review...');
+              result = await client.submitPullRequestReview({
+                body: comment,
+                pullRequestId: pullRequest.id,
+                pullRequestReviewId: freshPendingReviewID,
+                event,
+              });
+            } else {
+              console.log('⚠️ Still no real review ID after refresh, falling back to addComment');
+              if (event === PullRequestReviewEvent.Comment) {
+                result = await client.addComment(pullRequest.id, comment);
+              } else {
+                result = await client.addPullRequestReview({
+                  body: comment,
+                  pullRequestId: pullRequest.id,
+                  event,
+                });
+              }
+            }
+          } else if (pendingReviewID != null) {
+            // We have a real pending review ID, submit it normally
+            console.log('✅ Submitting existing pending review...');
+            result = await client.submitPullRequestReview({
+              body: comment,
+              pullRequestId: pullRequest.id,
+              pullRequestReviewId: pendingReviewID,
+              event,
+            });
+          } else {
+            // No pending reviews, create new comment/review
+            console.log('✅ Creating new comment/review...');
             if (event === PullRequestReviewEvent.Comment) {
               result = await client.addComment(pullRequest.id, comment);
             } else {
@@ -80,15 +125,6 @@ export default function PullRequestTimelineCommentInput(): React.ReactElement {
                 event,
               });
             }
-          } else {
-            // For merged/closed PRs, we still need to submit the pending review
-            // Don't convert to regular comments - just submit the review normally
-            result = await client.submitPullRequestReview({
-              body: comment,
-              pullRequestId: pullRequest.id,
-              pullRequestReviewId: pendingReviewID,
-              event,
-            });
           }
 
           console.log('✅ API call succeeded for timeline comment');
@@ -116,7 +152,7 @@ export default function PullRequestTimelineCommentInput(): React.ReactElement {
       addComment={addComment}
       autoFocus={false}
       resetInputAfterAddingComment={true}
-      allowEmptyMessage={pendingReviewID != null || event === PullRequestReviewEvent.Approve}
+      allowEmptyMessage={hasPendingReview || event === PullRequestReviewEvent.Approve}
       label="Submit"
       actionSelector={<PullRequestReviewSelector event={event} onSelect={setEvent} />}
     />

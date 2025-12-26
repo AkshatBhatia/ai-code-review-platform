@@ -16,6 +16,7 @@ import {
 } from './recoil';
 import {timelineScrollToBottom} from './PullRequestLayout';
 import {gitHubUsername} from './github/gitHubCredentials';
+import useRefreshPullRequest from './useRefreshPullRequest';
 import {Box, Text} from '@primer/react';
 import {useRecoilCallback, useResetRecoilState} from 'recoil';
 import type {PullRequestReviewCommentFragment} from './generated/graphql';
@@ -106,6 +107,7 @@ type Props = {
 
 export default function PullRequestNewCommentInput({line, path, side}: Props): React.ReactElement {
   const onCancel = useResetRecoilState(gitHubPullRequestNewCommentInputCell);
+  const refreshPullRequest = useRefreshPullRequest();
   const addComment = useRecoilCallback<[string], Promise<void>>(
     ({snapshot, set}) =>
       async comment => {
@@ -280,6 +282,9 @@ export default function PullRequestNewCommentInput({line, path, side}: Props): R
           } else {
             console.warn('⚠️ Server response missing comment data, keeping optimistic comment');
           }
+          
+          // Note: We don't refresh here to avoid full component re-render.
+          // The pending review state will be handled by the optimistic updates above.
         } catch (error) {
           // Rollback optimistic update on failure
           console.log('❌ API call failed, rolling back optimistic comment...');
@@ -287,7 +292,7 @@ export default function PullRequestNewCommentInput({line, path, side}: Props): R
           throw error;
         }
       },
-    [line, onCancel, path, side],
+    [line, onCancel, path, side, refreshPullRequest],
   );
 
   return (

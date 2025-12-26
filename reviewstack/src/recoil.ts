@@ -169,13 +169,29 @@ export const gitHubPullRequestPendingReviewID = selector<ID | null>({
         item?.__typename === 'PullRequestReview' && item.state === PullRequestReviewState.Pending,
     ) as PullRequestReviewItem;
     
-    // Filter out temporary optimistic IDs - only return real GitHub review IDs
     const reviewId = pendingReview?.id ?? null;
+    
+    // Filter out temporary optimistic IDs for API calls - only return real GitHub review IDs
     if (reviewId && (reviewId.startsWith('temp_review_') || reviewId.startsWith('temp_'))) {
       return null;
     }
     
     return reviewId;
+  },
+});
+
+// Helper selector to check if there are any pending reviews (including optimistic ones)
+export const gitHubPullRequestHasPendingReview = selector<boolean>({
+  key: 'gitHubPullRequestHasPendingReview',
+  get: ({get}) => {
+    const pullRequest = get(gitHubPullRequest);
+    const pendingReview = (pullRequest?.timelineItems?.nodes ?? []).find(
+      item =>
+        item?.__typename === 'PullRequestReview' && item.state === PullRequestReviewState.Pending,
+    ) as PullRequestReviewItem;
+    
+    // Return true if there's any pending review, including optimistic ones
+    return pendingReview != null;
   },
 });
 

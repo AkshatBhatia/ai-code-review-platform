@@ -2,6 +2,7 @@
 
 This file contains important information for Claude's future development sessions on this ReviewStack project.
 
+
 ## GitHub Authentication Token
 
 **For Local Development (`localhost:3000`):**

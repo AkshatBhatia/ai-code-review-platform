@@ -260,31 +260,59 @@ export default function PullRequestNewCommentInput({line, path, side}: Props): R
             pullRequestId: pullRequest.id,
           });
 
-          console.log('✅ API call succeeded, updating optimistic comment with server data...');
+          console.log('✅ API call succeeded, updating with server data...');
           // Extract server comment data from the response
           const serverComment = result.addPullRequestReviewComment?.comment;
           
           if (serverComment) {
-            // Update the optimistic comment with server data in place (no UI refresh)
-            const pullRequestWithServerData = updateOptimisticCommentWithServerData(
-              updatedPullRequest as PullRequest,
-              optimisticCommentId,
-              serverComment
-            );
+            // Extract the real review ID from the server response
+            const serverReviewId = serverComment.pullRequestReview?.id;
             
-            // Quietly update the state with server data - no visual change
-            set(gitHubPullRequest, pullRequestWithServerData);
-            
-            // Trigger scroll again to ensure the comment is visible after server update
-            set(timelineScrollToBottom, Date.now());
-            
-            console.log('🔄 Optimistic comment updated with server data (no refresh!)');
+            if (serverReviewId) {
+              console.log('✅ Got real review ID from server:', serverReviewId);
+              
+              // Update both the comment AND the review ID with server data
+              let pullRequestWithServerData = updateOptimisticCommentWithServerData(
+                updatedPullRequest as PullRequest,
+                optimisticCommentId,
+                serverComment
+              );
+              
+              // Find and update the optimistic review with the real server review ID
+              if (pullRequestWithServerData.timelineItems?.nodes) {
+                pullRequestWithServerData = {
+                  ...pullRequestWithServerData,
+                  timelineItems: {
+                    ...pullRequestWithServerData.timelineItems,
+                    nodes: pullRequestWithServerData.timelineItems.nodes.map(item => {
+                      if (item?.__typename === 'PullRequestReview' && 
+                          item.state === PullRequestReviewState.Pending &&
+                          item.id.startsWith('temp_review_')) {
+                        // Replace temp review ID with real server ID
+                        return {
+                          ...item,
+                          id: serverReviewId,
+                        };
+                      }
+                      return item;
+                    }),
+                  },
+                };
+              }
+              
+              // Update the state with server data - includes real review ID
+              set(gitHubPullRequest, pullRequestWithServerData);
+              
+              // Trigger scroll to ensure the comment is visible
+              set(timelineScrollToBottom, Date.now());
+              
+              console.log('🔄 Updated comment and review with real IDs from server!');
+            } else {
+              console.warn('⚠️ Server response missing review ID');
+            }
           } else {
             console.warn('⚠️ Server response missing comment data, keeping optimistic comment');
           }
-          
-          // Note: We don't refresh here to avoid full component re-render.
-          // The pending review state will be handled by the optimistic updates above.
         } catch (error) {
           // Rollback optimistic update on failure
           console.log('❌ API call failed, rolling back optimistic comment...');

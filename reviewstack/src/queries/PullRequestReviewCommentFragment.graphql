@@ -18,4 +18,8 @@ fragment PullRequestReviewCommentFragment on PullRequestReviewComment {
     oid
   }
   position
+  pullRequestReview {
+    id
+    state
+  }
 }

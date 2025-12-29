@@ -23,6 +23,10 @@ config.externals = {
 config.output.library = 'ReviewStack';
 config.output.libraryTarget = 'umd';
 
+// Add support for dynamic imports and workers
+config.output.globalObject = 'this';
+config.output.chunkFilename = 'static/js/[name].[contenthash:8].chunk.js';
+
 // ts-loader is required to reference external typescript projects/files (non-transpiled)
 config.module.rules.push({
   test: /\.tsx?$/,

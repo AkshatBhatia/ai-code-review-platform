@@ -69,6 +69,7 @@ import {
 import {globalCacheStats} from './GitHubClientStats';
 import {createGraphQLEndpointForHostname} from './gitHubCredentials';
 import queryGraphQL from './queryGraphQL';
+import {withFetchRetry} from './retryUtils';
 import {createRequestHeaders} from 'shared/github/auth';
 import {notEmpty} from 'shared/utils';
 
@@ -173,7 +174,7 @@ export default class GraphQLGitHubClient implements GitHubClient {
     const url = `https://api.${this.hostname}/repos/${encodeURIComponent(
       this.organization,
     )}/${encodeURIComponent(this.repositoryName)}/git/blobs/${oid}`;
-    const response = await fetch(url, {
+    const response = await withFetchRetry(url, {
       headers: this.requestHeaders,
       method: 'GET',
     });
@@ -235,7 +236,7 @@ export default class GraphQLGitHubClient implements GitHubClient {
     const url = `https://api.${this.hostname}/repos/${encodeURIComponent(
       this.organization,
     )}/${encodeURIComponent(this.repositoryName)}/compare/${base}...${head}`;
-    const response = await fetch(url, {
+    const response = await withFetchRetry(url, {
       headers: this.requestHeaders,
       method: 'GET',
     });

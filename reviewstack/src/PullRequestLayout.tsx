@@ -8,6 +8,7 @@
 import type {AllDrawersState} from 'shared/Drawers';
 
 import CenteredSpinner from './CenteredSpinner';
+import {PullRequestHeaderSkeleton, TimelineSkeleton, PullRequestContentSkeleton} from './LoadingSkeletons';
 import {useCommand} from './KeyboardShortcuts';
 import PullRequest from './PullRequest';
 import PullRequestHeader from './PullRequestHeader';
@@ -71,8 +72,22 @@ export default function PullRequestLayout({
 
   return (
     <Box>
-      <PullRequestHeader height={HEADER_HEIGHT} />
-      <Suspense fallback={<CenteredSpinner message="Loading pull request..." />}>
+      <Suspense fallback={<PullRequestHeaderSkeleton height={HEADER_HEIGHT} />}>
+        <PullRequestHeader height={HEADER_HEIGHT} />
+      </Suspense>
+      <Suspense fallback={
+        <Drawers
+          drawerState={drawerState}
+          errorBoundary={ErrorBoundary}
+          rightLabel={<Text className="drawer-label-text">...</Text>}
+          right={<Box padding={3}><TimelineSkeleton /></Box>}>
+          <Box display="flex" flexDirection="row">
+            <Box height={`calc(100vh - ${TOTAL_HEADER_HEIGHT}px)`} overflow="auto" padding={3}>
+              <PullRequestContentSkeleton />
+            </Box>
+          </Box>
+        </Drawers>
+      }>
         <Drawers
           drawerState={drawerState}
           errorBoundary={ErrorBoundary}
@@ -114,7 +129,9 @@ function TimelineDrawer() {
         overflow="auto"
         ref={scrollRef}
       >
-        <PullRequestTimeline />
+        <Suspense fallback={<TimelineSkeleton />}>
+          <PullRequestTimeline />
+        </Suspense>
       </Box>
       <Box display="flex" height={COMMENT_INPUT_HEIGHT}>
         <PullRequestTimelineCommentInput />

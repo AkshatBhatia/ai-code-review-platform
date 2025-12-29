@@ -20,6 +20,11 @@ defaults.__set__('configFactory', env => {
     recoil: 'Recoil',
   };
   config.output.library = 'ReviewStack';
+  
+  // Add support for dynamic imports and workers
+  config.output.globalObject = 'this';
+  config.output.chunkFilename = 'static/js/[name].[contenthash:8].chunk.js';
+  
   config.module.rules.shift({
     test: /^generated\/textmate\/(.*)\.(json|plist)$/,
     use: [

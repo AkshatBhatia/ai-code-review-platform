@@ -15,6 +15,7 @@ import useRefreshPullRequest from './useRefreshPullRequest';
 import {useState} from 'react';
 import {useRecoilCallback, useRecoilValue} from 'recoil';
 import type {PullRequest} from './github/pullRequestTimelineTypes';
+import {PullRequestReviewCommentState} from './generated/graphql';
 
 export default function PullRequestTimelineCommentInput(): React.ReactElement {
   const pendingReviewID = useRecoilValue(gitHubPullRequestPendingReviewID);
@@ -151,6 +152,7 @@ export default function PullRequestTimelineCommentInput(): React.ReactElement {
                           if (comment.pullRequestReview?.id === pendingReviewID) {
                             return {
                               ...comment,
+                              state: PullRequestReviewCommentState.Submitted,
                               pullRequestReview: submittedReview,
                             };
                           }

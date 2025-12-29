@@ -7,6 +7,8 @@
 
 .reviewstack .drawers {
   --drawer-label-size: 14px;
+  /* Prevent layout shifts by using stable sizing */
+  contain: layout;
 }
 
 .reviewstack .drawer-label-text {
@@ -16,4 +18,28 @@
 .reviewstack .drawer-left > div:nth-child(3),
 .reviewstack .drawer-right > div:nth-child(3) {
   width: 100%;
+}
+
+/* Stable sizing for drawer contents */
+.reviewstack .drawer-content {
+  min-height: 100px;
+  contain: layout;
+}
+
+/* Timeline container stability */
+.reviewstack .drawer-right {
+  min-width: 300px;
+  contain: layout;
+}
+
+/* Prevent shifts in the main content area */
+.reviewstack .drawer-center {
+  min-height: calc(100vh - 200px);
+  contain: layout;
+}
+
+/* Loading states should not cause shifts */
+.reviewstack .loading-container {
+  min-height: inherit;
+  contain: layout;
 }

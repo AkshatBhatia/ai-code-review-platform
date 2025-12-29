@@ -6,12 +6,10 @@
       The production bundle is designed such that React and Recoil dependencies
       should be injectable so it is easier to embed in larger React applications.
 
-      Note that "development" is used instead of "production" in the React URLs
-      below to catch issues like:
-      "Each child in a list should have a unique "key" prop."
+      Using production builds for better performance.
     -->
-    <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.development.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.development.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
     <!--
       Note that recoil.js appears to report errors (like when
       `dangerouslyAllowMutability` is needed for a Recoil value) that
@@ -30,8 +28,8 @@
       notes suggest 6.4 is a substantial update, so be mindful of a potential
       affect on download size: https://remix.run/blog/react-router-v6.4.
     -->
-    <script src="https://cdn.jsdelivr.net/npm/react-router@6.2.2/umd/react-router.development.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/react-router-dom@6.2.2/umd/react-router-dom.development.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-router@6.2.2/umd/react-router.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-router-dom@6.2.2/umd/react-router-dom.production.min.js"></script>
 
     <meta charset="utf-8" />
     <link rel="icon" href="%PUBLIC_URL%/Sapling_favicon-light-green-transparent-big.svg" />

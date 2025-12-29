@@ -10,6 +10,7 @@ import './PullRequest.css';
 import type { GitHubPullRequestParams } from './recoil';
 
 import CenteredSpinner from './CenteredSpinner';
+import {PullRequestContentSkeleton, DiffViewSkeleton} from './LoadingSkeletons';
 import DiffView from './DiffView';
 import PullRequestChangeCount from './PullRequestChangeCount';
 import PullRequestLabels from './PullRequestLabels';
@@ -44,7 +45,11 @@ export default function PullRequest() {
   }, [resetComparableVersions]);
 
   return (
-    <Suspense fallback={<CenteredSpinner />}>
+    <Suspense fallback={
+      <div className="PullRequest-container">
+        <PullRequestContentSkeleton />
+      </div>
+    }>
       <div className="PullRequest-container">
         <PullRequestBootstrap />
       </div>
@@ -133,7 +138,7 @@ function PullRequestDetails() {
         <TrustedRenderedMarkdown trustedHTML={pullRequestBodyHTML} />
       </Box>
       <PullRequestSignals />
-      <Suspense fallback={<CenteredSpinner />}>
+      <Suspense fallback={<DiffViewSkeleton />}>
         <div>
           <div
             style={{
@@ -160,7 +165,7 @@ function PullRequestVersionDiff() {
   if (diff != null) {
     return (
       <Suspense
-        fallback={<CenteredSpinner message={'Loading ' + diff.diff.length + ' changes...'} />}>
+        fallback={<DiffViewSkeleton fileCount={Math.min(diff.diff.length, 5)} />}>
         <DiffView diff={diff.diff} isPullRequest={true} />
       </Suspense>
     );

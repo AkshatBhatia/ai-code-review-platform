@@ -8,10 +8,47 @@
 .PullRequest-container {
   margin: 0 6px;
   overflow-x: auto;
+  /* Prevent layout shifts by reserving minimum space for content */
+  min-height: calc(100vh - 200px);
 }
 
 .PullRequest-title {
   font-size: 16px;
   font-weight: bold;
   margin-bottom: 4px;
+}
+
+/* Prevent layout shifts in reviewers and labels sections */
+.PullRequest-container [aria-labelledby]:not(:has(*)) {
+  min-height: 40px;
+}
+
+/* Reserve space for dynamic content sections */
+.PullRequest-container > div {
+  contain: layout;
+}
+
+/* Smooth transitions for loading content */
+.PullRequest-container .Primer_Box {
+  transition: height 0.2s ease-out;
+}
+
+/* Ensure diff containers maintain stable height */
+.diff-container {
+  min-height: 200px;
+  contain: layout;
+}
+
+/* Prevent reflow during content loading */
+.PullRequest-container img,
+.PullRequest-container video {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Loading state containers should reserve space */
+.loading-placeholder {
+  min-height: 100px;
+  contain: layout;
 }

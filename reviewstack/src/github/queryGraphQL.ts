@@ -5,13 +5,15 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import {withFetchRetry} from './retryUtils';
+
 export default async function queryGraphQL<TData, TVariables>(
   query: string,
   variables: TVariables,
   requestHeaders: Record<string, string>,
   graphQLEndpoint: string,
 ): Promise<TData> {
-  const response = await fetch(graphQLEndpoint, {
+  const response = await withFetchRetry(graphQLEndpoint, {
     headers: requestHeaders,
     method: 'POST',
     body: JSON.stringify({query, variables}),

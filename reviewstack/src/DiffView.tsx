@@ -27,9 +27,9 @@ export default function DiffView({diff, isPullRequest}: {diff: Diff; isPullReque
       );
     });
     // TODO: Add SuspenseList here so files can load in individually
-    return <div>{children}</div>;
+    return <Box minHeight="200px">{children}</Box>;
   } else {
-    return <div>commit not found or fetched from GitHub URL above</div>;
+    return <Box minHeight="200px"><div>commit not found or fetched from GitHub URL above</div></Box>;
   }
 }
 

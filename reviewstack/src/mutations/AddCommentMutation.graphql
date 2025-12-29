@@ -6,13 +6,14 @@ mutation AddCommentMutation($id: ID!, $body: String!) {
     commentEdge {
       cursor
       node {
-        id
-      }
-    }
-    timelineEdge {
-      cursor
-      node {
-        __typename
+        ... on IssueComment {
+          __typename
+          id
+          author {
+            ...ActorFragment
+          }
+          bodyHTML
+        }
       }
     }
   }

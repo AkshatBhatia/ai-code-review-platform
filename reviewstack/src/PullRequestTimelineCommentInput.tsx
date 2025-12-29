@@ -14,6 +14,8 @@ import {timelineScrollToBottom} from './PullRequestLayout';
 import useRefreshPullRequest from './useRefreshPullRequest';
 import {useState} from 'react';
 import {useRecoilCallback, useRecoilValue} from 'recoil';
+import type {PullRequest} from './github/pullRequestTimelineTypes';
+import {PullRequestReviewCommentState} from './generated/graphql';
 
 export default function PullRequestTimelineCommentInput(): React.ReactElement {
   const pendingReviewID = useRecoilValue(gitHubPullRequestPendingReviewID);
@@ -74,35 +76,17 @@ export default function PullRequestTimelineCommentInput(): React.ReactElement {
           // Check if we have any pending reviews (including optimistic ones)
           if (hasPendingReview && pendingReviewID == null) {
             // We have pending reviews but no real server ID yet (optimistic reviews)
-            // We need to refresh to get the real review ID, then submit
-            console.log('🔄 Refreshing to get real pending review ID before submit...');
-            refreshPullRequest();
+            // For now, we'll just create a new comment/review
+            console.log('⚠️ Have optimistic pending reviews but no server ID, creating new review...');
             
-            // Wait a bit for the refresh to complete, then try to get the real ID
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            // Get the fresh pending review ID after refresh
-            const freshPendingReviewID = snapshot.getLoadable(gitHubPullRequestPendingReviewID).valueMaybe();
-            
-            if (freshPendingReviewID) {
-              console.log('✅ Got real pending review ID, submitting review...');
-              result = await client.submitPullRequestReview({
+            if (event === PullRequestReviewEvent.Comment) {
+              result = await client.addComment(pullRequest.id, comment);
+            } else {
+              result = await client.addPullRequestReview({
                 body: comment,
                 pullRequestId: pullRequest.id,
-                pullRequestReviewId: freshPendingReviewID,
                 event,
               });
-            } else {
-              console.log('⚠️ Still no real review ID after refresh, falling back to addComment');
-              if (event === PullRequestReviewEvent.Comment) {
-                result = await client.addComment(pullRequest.id, comment);
-              } else {
-                result = await client.addPullRequestReview({
-                  body: comment,
-                  pullRequestId: pullRequest.id,
-                  event,
-                });
-              }
             }
           } else if (pendingReviewID != null) {
             // We have a real pending review ID, submit it normally
@@ -127,10 +111,109 @@ export default function PullRequestTimelineCommentInput(): React.ReactElement {
             }
           }
 
-          console.log('✅ API call succeeded for timeline comment');
+          console.log('✅ API call succeeded, updating with server data...');
           
-          // Refresh pull request data to update pending review status
-          refreshPullRequest();
+          // Update pull request state based on the response
+          let updatedPullRequest: PullRequest = pullRequest;
+          
+          // Handle submitPullRequestReview response
+          if (result && 'submitPullRequestReview' in result && result.submitPullRequestReview?.pullRequestReview) {
+            const submittedReview = result.submitPullRequestReview.pullRequestReview;
+            console.log('📝 Updating submitted review in timeline');
+            
+            // Replace the pending review with the submitted one
+            updatedPullRequest = {
+              ...pullRequest,
+              timelineItems: {
+                ...pullRequest.timelineItems,
+                nodes: (pullRequest.timelineItems.nodes ?? []).map(item => {
+                  if (item?.__typename === 'PullRequestReview' && item.id === pendingReviewID) {
+                    return submittedReview;
+                  }
+                  return item;
+                }),
+              },
+              // Also update review threads from PENDING to the submitted state
+              reviewThreads: {
+                ...pullRequest.reviewThreads,
+                nodes: (pullRequest.reviewThreads.nodes ?? []).map(thread => {
+                  if (!thread) return thread;
+                  // Update threads that were part of this pending review
+                  const hasCommentFromPendingReview = thread.comments.nodes?.some(
+                    comment => comment?.pullRequestReview?.id === pendingReviewID
+                  );
+                  if (hasCommentFromPendingReview) {
+                    return {
+                      ...thread,
+                      comments: {
+                        ...thread.comments,
+                        nodes: thread.comments.nodes?.map(comment => {
+                          if (!comment) return comment;
+                          if (comment.pullRequestReview?.id === pendingReviewID) {
+                            return {
+                              ...comment,
+                              state: PullRequestReviewCommentState.Submitted,
+                              pullRequestReview: submittedReview,
+                            };
+                          }
+                          return comment;
+                        }),
+                      },
+                    };
+                  }
+                  return thread;
+                }),
+              },
+            };
+          }
+          // Handle addComment response
+          else if (result && 'addComment' in result && result.addComment?.commentEdge?.node) {
+            const newComment = result.addComment.commentEdge.node;
+            console.log('📝 Adding comment to timeline');
+            
+            // Replace optimistic comment with real one, or add if no optimistic
+            const hasOptimistic = (pullRequest.timelineItems.nodes ?? []).some(
+              item => item?.__typename === 'IssueComment' && item.id.startsWith('temp_')
+            );
+            
+            if (hasOptimistic) {
+              updatedPullRequest = {
+                ...pullRequest,
+                timelineItems: {
+                  ...pullRequest.timelineItems,
+                  nodes: (pullRequest.timelineItems.nodes ?? []).map(item => {
+                    if (item?.__typename === 'IssueComment' && item.id.startsWith('temp_')) {
+                      return newComment;
+                    }
+                    return item;
+                  }),
+                },
+              };
+            } else {
+              updatedPullRequest = {
+                ...pullRequest,
+                timelineItems: {
+                  ...pullRequest.timelineItems,
+                  nodes: [...(pullRequest.timelineItems.nodes ?? []), newComment],
+                },
+              };
+            }
+          }
+          // Handle addPullRequestReview response
+          else if (result && 'addPullRequestReview' in result && result.addPullRequestReview?.pullRequestReview) {
+            const newReview = result.addPullRequestReview.pullRequestReview;
+            console.log('📝 Adding review to timeline');
+            
+            updatedPullRequest = {
+              ...pullRequest,
+              timelineItems: {
+                ...pullRequest.timelineItems,
+                nodes: [...(pullRequest.timelineItems.nodes ?? []), newReview],
+              },
+            };
+          }
+          
+          set(gitHubPullRequest, updatedPullRequest);
           
           // Trigger scroll to bottom after server update to ensure the comment is visible
           set(timelineScrollToBottom, Date.now());

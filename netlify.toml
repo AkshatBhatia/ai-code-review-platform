@@ -2,8 +2,8 @@
   # Directory where the built files are located
   publish = "reviewstack.dev/build"
   
-  # Build command - run codegen first, then build
-  command = "yarn workspace reviewstack run codegen && yarn workspace reviewstack.dev run build"
+  # Build command - run tests, codegen, then build
+  command = "yarn run build:with-tests"
   
   # Directory with Netlify Functions
   functions = "netlify/functions"
@@ -11,6 +11,8 @@
 # Environment variables that should be available during build
 [build.environment]
   NODE_VERSION = "18"
+  CI = "true"
+  NODE_ENV = "test"
 
 # Redirect rules - SPA fallback for client-side routing
 [[redirects]]

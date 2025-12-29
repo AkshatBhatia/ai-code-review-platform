@@ -1,7 +1,18 @@
 mutation AddPullRequestReviewMutation($input: AddPullRequestReviewInput!) {
   addPullRequestReview(input: $input) {
     pullRequestReview {
+      __typename
       id
+      author {
+        ...ActorFragment
+      }
+      state
+      bodyHTML
+      comments(first: 100) {
+        nodes {
+          ...PullRequestReviewCommentFragment
+        }
+      }
     }
   }
 }

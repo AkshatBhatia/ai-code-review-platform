@@ -20,7 +20,7 @@
     "prettier-check": "prettier --check .",
     "prettier-fix": "prettier --write .",
     "test:all": "yarn workspace shared run test && yarn workspace reviewstack run test -- --watchAll=false",
-    "build:with-tests": "yarn run test:all && yarn workspace reviewstack run codegen && yarn workspace reviewstack.dev run build"
+    "build:with-tests": "yarn workspace reviewstack run codegen && yarn run test:all && yarn workspace reviewstack.dev run build"
   },
   "resolutions": {
     "rollup": "3.29.5"

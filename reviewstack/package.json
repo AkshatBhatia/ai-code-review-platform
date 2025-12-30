@@ -40,5 +40,13 @@
   },
   "peerDependencies": {
     "styled-components": "4.x || 5.x"
+  },
+  "jest": {
+    "transformIgnorePatterns": [
+      "node_modules/(?!(@primer/react|@github/combobox-nav)/)"
+    ],
+    "moduleNameMapper": {
+      "^@primer/octicons-react$": "<rootDir>/__mocks__/@primer/octicons-react.js"
+    }
   }
 }

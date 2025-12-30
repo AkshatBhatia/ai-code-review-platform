@@ -24,7 +24,7 @@ import {gitHubTokenPersistence} from './github/gitHubCredentials';
 import {interviewUserRole, isInterviewUserAuthenticated} from './interviewState';
 import {primerColorMode} from './themeState';
 import {BaseStyles, Box, Text, useTheme} from '@primer/react';
-import React, {useEffect} from 'react';
+import React, {Suspense, useEffect} from 'react';
 import {useRecoilValue, useRecoilValueLoadable} from 'recoil';
 
 type Page =
@@ -65,7 +65,9 @@ export default function App({page}: {page: Page}): React.ReactElement {
           <PrimerStyles />
           <SplitDiffViewPrimerStyles />
           <Box bg="canvas.default" fontFamily="normal" className="reviewstack">
-            <ContentOrLoginDialog page={page} />
+            <Suspense fallback={<Box p={4}>Loading...</Box>}>
+              <ContentOrLoginDialog page={page} />
+            </Suspense>
           </Box>
         </BaseStyles>
       </ShortcutCommandContext>

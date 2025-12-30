@@ -28,13 +28,12 @@ import {
 } from '@primer/octicons-react';
 import { useRecoilValue } from 'recoil';
 import { gitHubUsername } from './github/gitHubCredentials';
-import { 
-  currentInterviewUser, 
-  interviewScenarios,
+import {
+  currentInterviewUser,
   activeInterviewSessions,
-  type InterviewScenario,
   type InterviewSession
 } from './interviewState';
+import ScenarioManagement from './ScenarioManagement';
 
 type DashboardTab = 'scenarios' | 'sessions' | 'candidates' | 'analytics';
 
@@ -42,21 +41,20 @@ export default function InterviewerDashboard(): React.ReactElement {
   const [activeTab, setActiveTab] = useState<DashboardTab>('scenarios');
   const username = useRecoilValue(gitHubUsername);
   const currentUser = useRecoilValue(currentInterviewUser);
-  const scenarios = useRecoilValue(interviewScenarios);
   const sessions = useRecoilValue(activeInterviewSessions);
 
   const renderTabContent = () => {
     switch (activeTab) {
       case 'scenarios':
-        return <ScenarioManagement scenarios={scenarios} />;
-      case 'sessions': 
+        return <ScenarioManagement />;
+      case 'sessions':
         return <SessionManagement sessions={sessions} />;
       case 'candidates':
         return <CandidateManagement />;
       case 'analytics':
         return <Analytics />;
       default:
-        return <ScenarioManagement scenarios={scenarios} />;
+        return <ScenarioManagement />;
     }
   };
 
@@ -154,76 +152,6 @@ export default function InterviewerDashboard(): React.ReactElement {
       <Box mt={4}>
         {renderTabContent()}
       </Box>
-    </Box>
-  );
-}
-
-function ScenarioManagement({ scenarios }: { scenarios: InterviewScenario[] }): React.ReactElement {
-  return (
-    <Box>
-      <Box display="flex" alignItems="center" justifyContent="space-between" sx={{ mb: 4 }}>
-        <Heading as="h2" sx={{ fontSize: 2 }}>Question Bank</Heading>
-        <Button variant="primary" leadingIcon={PlusIcon}>
-          Create Scenario
-        </Button>
-      </Box>
-
-      {scenarios.length === 0 ? (
-        <Box 
-          textAlign="center" 
-          py={6} 
-          borderWidth="1px"
-          borderStyle="dashed" 
-          borderColor="border.default"
-          borderRadius={6}
-        >
-          <Text color="fg.muted" mb={3}>No scenarios created yet</Text>
-          <Button variant="primary" leadingIcon={PlusIcon}>
-            Create Your First Scenario
-          </Button>
-        </Box>
-      ) : (
-        <Box
-          borderWidth="1px" 
-          borderStyle="solid"
-          borderColor="border.default"
-          borderRadius={6}
-        >
-          {scenarios.map((scenario, index) => (
-            <Box
-              key={scenario.id}
-              p={4}
-              borderBottomWidth={index < scenarios.length - 1 ? "1px" : "0"}
-              borderBottomStyle="solid"
-              borderBottomColor="border.muted"
-            >
-              <Box display="flex" alignItems="center" justifyContent="space-between">
-                <Box>
-                  <Text fontWeight="bold" display="block" mb={1}>
-                    {scenario.title}
-                  </Text>
-                  <Text color="fg.muted" fontSize={1} mb={2}>
-                    {scenario.description}
-                  </Text>
-                  <Box display="flex" sx={{ gap: 2 }}>
-                    <Label variant="secondary">{scenario.difficulty}</Label>
-                    {scenario.focus_areas.map(area => (
-                      <Label key={area} variant="accent">{area}</Label>
-                    ))}
-                    <Label variant="default">
-                      <StyledOcticon icon={ClockIcon} sx={{ mr: 1 }} />
-                      {scenario.estimated_time}m
-                    </Label>
-                  </Box>
-                </Box>
-                <Button variant="default" size="small">
-                  Use Scenario
-                </Button>
-              </Box>
-            </Box>
-          ))}
-        </Box>
-      )}
     </Box>
   );
 }

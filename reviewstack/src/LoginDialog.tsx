@@ -7,6 +7,7 @@
 
 import {gitHubHostname, gitHubTokenPersistence} from './github/gitHubCredentials';
 import {useSetRecoilState} from 'recoil';
+import {startTransition} from 'react';
 
 export type CustomLoginDialogProps = {
   setTokenAndHostname(token: string, hostname: string): void;
@@ -24,8 +25,10 @@ export default function LoginDialog(): React.ReactElement {
   const setToken = useSetRecoilState(gitHubTokenPersistence);
   const setHostname = useSetRecoilState(gitHubHostname);
   function setTokenAndHostname(token: string, hostname: string): void {
-    setHostname(hostname);
-    setToken(token);
+    startTransition(() => {
+      setHostname(hostname);
+      setToken(token);
+    });
   }
   if (CustomLoginDialogComponent != null) {
     return <CustomLoginDialogComponent setTokenAndHostname={setTokenAndHostname} />;

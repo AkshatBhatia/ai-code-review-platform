@@ -25,12 +25,13 @@ import {
 } from '@primer/octicons-react';
 import { useRecoilValue } from 'recoil';
 import { gitHubUsername, gitHubTokenPersistence } from './github/gitHubCredentials';
-import { listScenarios, createScenario, parseGitHubPRURL } from './scenarioAPI';
+import { listScenarios, createScenario, parseGitHubPRURL, updateScenarioStatus } from './scenarioAPI';
 import type { Scenario, CreateScenarioRequest } from './scenarioTypes';
 import { validatePRForScenario, type ValidationResult } from './githubValidation';
 
 export default function ScenarioManagement(): React.ReactElement {
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [validatedScenarios, setValidatedScenarios] = useState<Scenario[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -38,19 +39,37 @@ export default function ScenarioManagement(): React.ReactElement {
 
   // Load scenarios on mount
   useEffect(() => {
-    loadScenarios();
+    loadAllScenarios();
   }, []);
 
-  const loadScenarios = async () => {
+  const loadAllScenarios = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await listScenarios({ status: 'active' });
-      setScenarios(data);
+      // Load both active and validated scenarios in parallel
+      const [activeData, validatedData] = await Promise.all([
+        listScenarios({ status: 'active' }),
+        listScenarios({ status: 'validated' }),
+      ]);
+      setScenarios(activeData);
+      setValidatedScenarios(validatedData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load scenarios');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleStatusUpdate = async (
+    scenarioId: string,
+    newStatus: 'active' | 'archived'
+  ) => {
+    try {
+      await updateScenarioStatus(scenarioId, newStatus);
+      // Reload all scenarios to reflect the change
+      await loadAllScenarios();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update scenario status');
     }
   };
 
@@ -83,7 +102,7 @@ export default function ScenarioManagement(): React.ReactElement {
         bg="danger.subtle"
       >
         <Text color="danger.fg">Error: {error}</Text>
-        <Button onClick={loadScenarios} sx={{ mt: 2 }}>
+        <Button onClick={loadAllScenarios} sx={{ mt: 2 }}>
           Retry
         </Button>
       </Box>
@@ -92,6 +111,41 @@ export default function ScenarioManagement(): React.ReactElement {
 
   return (
     <Box>
+      {/* Pending Activation Section */}
+      {validatedScenarios.length > 0 && (
+        <Box sx={{ mb: 5 }}>
+          <Box display="flex" alignItems="center" sx={{ mb: 3 }}>
+            <Heading as="h2" sx={{ fontSize: 2 }}>
+              Pending Activation
+            </Heading>
+            <Label variant="attention" sx={{ ml: 2 }}>
+              {validatedScenarios.length}
+            </Label>
+          </Box>
+          <Text color="fg.muted" sx={{ mb: 3 }}>
+            These scenarios have been validated and are ready to be activated for interviews.
+          </Text>
+          <Box
+            borderWidth="1px"
+            borderStyle="solid"
+            borderColor="border.default"
+            borderRadius={6}
+          >
+            {validatedScenarios.map((scenario, index) => (
+              <ScenarioCard
+                key={scenario.id}
+                scenario={scenario}
+                isLast={index === validatedScenarios.length - 1}
+                showActions={true}
+                onActivate={() => handleStatusUpdate(scenario.id, 'active')}
+                onArchive={() => handleStatusUpdate(scenario.id, 'archived')}
+              />
+            ))}
+          </Box>
+        </Box>
+      )}
+
+      {/* Active Scenarios Section */}
       <Box display="flex" alignItems="center" justifyContent="space-between" sx={{ mb: 4 }}>
         <Heading as="h2" sx={{ fontSize: 2 }}>
           Scenario Catalog
@@ -156,9 +210,15 @@ export default function ScenarioManagement(): React.ReactElement {
 function ScenarioCard({
   scenario,
   isLast,
+  showActions = false,
+  onActivate,
+  onArchive,
 }: {
   scenario: Scenario;
   isLast: boolean;
+  showActions?: boolean;
+  onActivate?: () => void;
+  onArchive?: () => void;
 }): React.ReactElement {
   const prURL = `https://github.com/${scenario.repo}/pull/${scenario.canonical_pr_number}`;
 
@@ -202,9 +262,28 @@ function ScenarioCard({
           >
             View PR
           </Button>
-          <Button variant="primary" size="small">
-            Start Interview
-          </Button>
+          {showActions ? (
+            <>
+              <Button
+                variant="primary"
+                size="small"
+                onClick={onActivate}
+              >
+                Activate
+              </Button>
+              <Button
+                variant="danger"
+                size="small"
+                onClick={onArchive}
+              >
+                Archive
+              </Button>
+            </>
+          ) : (
+            <Button variant="primary" size="small">
+              Start Interview
+            </Button>
+          )}
         </Box>
       </Box>
     </Box>

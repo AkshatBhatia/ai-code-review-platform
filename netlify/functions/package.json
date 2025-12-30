@@ -1,0 +1,8 @@
+{
+  "name": "reviewstack-functions",
+  "version": "1.0.0",
+  "description": "Netlify Functions for ReviewStack",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.89.0"
+  }
+}

@@ -25,5 +25,7 @@
   "resolutions": {
     "rollup": "3.29.5"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@supabase/supabase-js": "^2.89.0"
+  }
 }

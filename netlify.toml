@@ -10,7 +10,7 @@
 
 # Environment variables that should be available during build
 [build.environment]
-  NODE_VERSION = "18"
+  NODE_VERSION = "20"
   CI = "true"
   NODE_ENV = "test"
 

@@ -7,3 +7,9 @@ build/
 
 # Claude's development token - keep local only
 .github-token
+
+# Local Netlify folder
+.netlify
+
+# Deno lock file (not used in this project)
+deno.lock

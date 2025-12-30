@@ -314,8 +314,8 @@ describe('Submit Button State Concepts', () => {
       expect(state.lastUpdateTimestamp).toBeGreaterThan(initialTime);
 
       const beforeReviewUpdate = state.lastUpdateTimestamp;
-      // Add small delay to ensure timestamp difference
-      await new Promise(resolve => setTimeout(resolve, 1));
+      // Add delay to ensure timestamp difference in CI environments
+      await new Promise(resolve => setTimeout(resolve, 10));
       updateState('pendingReviewId', 'review_456');
       expect(state.pendingReviewId).toBe('review_456');
       expect(state.lastUpdateTimestamp).toBeGreaterThan(beforeReviewUpdate);

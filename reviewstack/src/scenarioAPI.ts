@@ -86,6 +86,35 @@ export async function createScenario(
 }
 
 /**
+ * Update scenario validation status
+ */
+export async function updateScenarioStatus(
+  scenarioId: string,
+  validationStatus: 'draft' | 'validated' | 'active' | 'archived'
+): Promise<Scenario> {
+  const url = `${getAPIBaseURL()}/update-scenario-status`;
+
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      scenario_id: scenarioId,
+      validation_status: validationStatus,
+    }),
+  });
+
+  if (!response.ok) {
+    const error: APIError = await response.json();
+    throw new Error(error.error || 'Failed to update scenario status');
+  }
+
+  const data: { scenario: Scenario } = await response.json();
+  return data.scenario;
+}
+
+/**
  * Helper: Parse GitHub PR URL to extract repo and PR number
  * Example: https://github.com/owner/repo/pull/123 -> { repo: "owner/repo", pr: 123 }
  */

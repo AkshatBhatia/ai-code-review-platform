@@ -16,8 +16,8 @@ import PullRequestTimelineCommentInput from './PullRequestTimelineCommentInput';
 import {APP_HEADER_HEIGHT} from './constants';
 import {gitHubOrgAndRepo, gitHubPullRequestID} from './recoil';
 import {Box, Text} from '@primer/react';
-import React, {Component, Suspense, useEffect} from 'react';
-import {atom, useSetRecoilState} from 'recoil';
+import React, {Component, Suspense, useEffect, useRef} from 'react';
+import {atom, useRecoilValue, useSetRecoilState} from 'recoil';
 import {Drawers} from 'shared/Drawers';
 
 import './PullRequestLayout.css';
@@ -34,6 +34,11 @@ const drawerState = atom<AllDrawersState>({
     top: {size: 200, collapsed: true},
     bottom: {size: 200, collapsed: true},
   },
+});
+
+export const timelineScrollToBottom = atom<number>({
+  key: 'timelineScrollToBottom',
+  default: 0,
 });
 
 export default function PullRequestLayout({
@@ -85,9 +90,30 @@ export default function PullRequestLayout({
 }
 
 function TimelineDrawer() {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollTrigger = useRecoilValue(timelineScrollToBottom);
+
+  useEffect(() => {
+    if (scrollTrigger > 0 && scrollRef.current) {
+      // Smooth scroll to bottom with a slight delay to ensure content is rendered
+      setTimeout(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTo({
+            top: scrollRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+      }, 100);
+    }
+  }, [scrollTrigger]);
+
   return (
     <Box display="flex" flexDirection="column" height={`calc(100vh - ${TOTAL_HEADER_HEIGHT}px)`}>
-      <Box height={`calc(100% - ${COMMENT_INPUT_HEIGHT}px)`} overflow="auto">
+      <Box 
+        height={`calc(100% - ${COMMENT_INPUT_HEIGHT}px)`} 
+        overflow="auto"
+        ref={scrollRef}
+      >
         <PullRequestTimeline />
       </Box>
       <Box display="flex" height={COMMENT_INPUT_HEIGHT}>

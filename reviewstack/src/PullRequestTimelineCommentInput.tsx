@@ -8,17 +8,20 @@
 import PullRequestCommentInput from './PullRequestCommentInput';
 import PullRequestReviewSelector from './PullRequestReviewSelector';
 import {PullRequestReviewEvent} from './generated/graphql';
-import {gitHubClient, gitHubPullRequest, gitHubPullRequestPendingReviewID} from './recoil';
+import {gitHubClient, gitHubPullRequest, gitHubPullRequestPendingReviewID, gitHubPullRequestHasPendingReview} from './recoil';
+import {gitHubUsername} from './github/gitHubCredentials';
+import {timelineScrollToBottom} from './PullRequestLayout';
 import useRefreshPullRequest from './useRefreshPullRequest';
 import {useState} from 'react';
 import {useRecoilCallback, useRecoilValue} from 'recoil';
 
 export default function PullRequestTimelineCommentInput(): React.ReactElement {
   const pendingReviewID = useRecoilValue(gitHubPullRequestPendingReviewID);
+  const hasPendingReview = useRecoilValue(gitHubPullRequestHasPendingReview);
   const refreshPullRequest = useRefreshPullRequest();
   const [event, setEvent] = useState(PullRequestReviewEvent.Comment);
   const addComment = useRecoilCallback<[string], Promise<void>>(
-    ({snapshot}) =>
+    ({snapshot, set}) =>
       async comment => {
         const clientLoadable = snapshot.getLoadable(gitHubClient);
         if (clientLoadable.state !== 'hasValue' || clientLoadable.contents == null) {
@@ -32,26 +35,113 @@ export default function PullRequestTimelineCommentInput(): React.ReactElement {
         }
         const pullRequest = pullRequestLoadable.contents;
 
-        if (pendingReviewID == null) {
-          if (event === PullRequestReviewEvent.Comment) {
-            await client.addComment(pullRequest.id, comment);
-          } else {
-            await client.addPullRequestReview({
-              body: comment,
-              pullRequestId: pullRequest.id,
-              event,
-            });
-          }
-        } else {
-          await client.submitPullRequestReview({
-            body: comment,
-            pullRequestId: pullRequest.id,
-            pullRequestReviewId: pendingReviewID,
-            event,
-          });
+        const usernameLoadable = snapshot.getLoadable(gitHubUsername);
+        const username = usernameLoadable.state === 'hasValue' ? usernameLoadable.contents : 'unknown';
+
+        // Create optimistic comment for UI
+        const optimisticComment = {
+          __typename: 'IssueComment' as const,
+          id: `temp_${Date.now()}`,
+          author: {
+            __typename: 'User' as const,
+            id: `temp_user_${Date.now()}`,
+            login: username || 'unknown',
+            avatarUrl: `https://github.com/${username || 'unknown'}.png`,
+          },
+          bodyHTML: `<p>${comment}</p>`,
+          createdAt: new Date().toISOString() as any,
+        };
+
+        // Add optimistic comment to UI immediately (only for simple comments)
+        if (pendingReviewID == null && event === PullRequestReviewEvent.Comment) {
+          const updatedPullRequest = {
+            ...pullRequest,
+            timelineItems: {
+              ...pullRequest.timelineItems,
+              nodes: [...(pullRequest.timelineItems.nodes ?? []), optimisticComment],
+            },
+          };
+          set(gitHubPullRequest, updatedPullRequest);
+          
+          // Trigger scroll to bottom to show the new comment
+          set(timelineScrollToBottom, Date.now());
         }
 
-        refreshPullRequest();
+        try {
+          console.log('🚀 Starting API call for timeline comment...');
+          let result;
+          
+          // Check if we have any pending reviews (including optimistic ones)
+          if (hasPendingReview && pendingReviewID == null) {
+            // We have pending reviews but no real server ID yet (optimistic reviews)
+            // We need to refresh to get the real review ID, then submit
+            console.log('🔄 Refreshing to get real pending review ID before submit...');
+            refreshPullRequest();
+            
+            // Wait a bit for the refresh to complete, then try to get the real ID
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Get the fresh pending review ID after refresh
+            const freshPendingReviewID = snapshot.getLoadable(gitHubPullRequestPendingReviewID).valueMaybe();
+            
+            if (freshPendingReviewID) {
+              console.log('✅ Got real pending review ID, submitting review...');
+              result = await client.submitPullRequestReview({
+                body: comment,
+                pullRequestId: pullRequest.id,
+                pullRequestReviewId: freshPendingReviewID,
+                event,
+              });
+            } else {
+              console.log('⚠️ Still no real review ID after refresh, falling back to addComment');
+              if (event === PullRequestReviewEvent.Comment) {
+                result = await client.addComment(pullRequest.id, comment);
+              } else {
+                result = await client.addPullRequestReview({
+                  body: comment,
+                  pullRequestId: pullRequest.id,
+                  event,
+                });
+              }
+            }
+          } else if (pendingReviewID != null) {
+            // We have a real pending review ID, submit it normally
+            console.log('✅ Submitting existing pending review...');
+            result = await client.submitPullRequestReview({
+              body: comment,
+              pullRequestId: pullRequest.id,
+              pullRequestReviewId: pendingReviewID,
+              event,
+            });
+          } else {
+            // No pending reviews, create new comment/review
+            console.log('✅ Creating new comment/review...');
+            if (event === PullRequestReviewEvent.Comment) {
+              result = await client.addComment(pullRequest.id, comment);
+            } else {
+              result = await client.addPullRequestReview({
+                body: comment,
+                pullRequestId: pullRequest.id,
+                event,
+              });
+            }
+          }
+
+          console.log('✅ API call succeeded for timeline comment');
+          
+          // Refresh pull request data to update pending review status
+          refreshPullRequest();
+          
+          // Trigger scroll to bottom after server update to ensure the comment is visible
+          set(timelineScrollToBottom, Date.now());
+        } catch (error) {
+          // Rollback optimistic update on failure
+          if (pendingReviewID == null && event === PullRequestReviewEvent.Comment) {
+            set(gitHubPullRequest, pullRequest);
+          }
+          throw error;
+        }
+
         setEvent(PullRequestReviewEvent.Comment);
       },
     [event, pendingReviewID, refreshPullRequest],
@@ -62,7 +152,7 @@ export default function PullRequestTimelineCommentInput(): React.ReactElement {
       addComment={addComment}
       autoFocus={false}
       resetInputAfterAddingComment={true}
-      allowEmptyMessage={pendingReviewID != null || event === PullRequestReviewEvent.Approve}
+      allowEmptyMessage={hasPendingReview || event === PullRequestReviewEvent.Approve}
       label="Submit"
       actionSelector={<PullRequestReviewSelector event={event} onSelect={setEvent} />}
     />

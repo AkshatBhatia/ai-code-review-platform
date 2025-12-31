@@ -6,7 +6,7 @@
  */
 
 import PullRequestCommentInput from './PullRequestCommentInput';
-import {DiffSide} from './generated/graphql';
+import {DiffSide, PullRequestReviewCommentState, PullRequestReviewState} from './generated/graphql';
 import {
   gitHubClient,
   gitHubPullRequest,
@@ -14,9 +14,90 @@ import {
   gitHubPullRequestNewCommentInputCell,
   gitHubPullRequestPositionForLine,
 } from './recoil';
+import {timelineScrollToBottom} from './PullRequestLayout';
+import {gitHubUsername} from './github/gitHubCredentials';
 import useRefreshPullRequest from './useRefreshPullRequest';
 import {Box, Text} from '@primer/react';
 import {useRecoilCallback, useResetRecoilState} from 'recoil';
+import type {PullRequestReviewCommentFragment} from './generated/graphql';
+import type {PullRequest} from './github/pullRequestTimelineTypes';
+
+/**
+ * Updates an optimistic comment with server data in place, preserving the visual state
+ * while replacing temporary IDs and data with authoritative server information.
+ */
+function updateOptimisticCommentWithServerData(
+  pullRequest: PullRequest,
+  optimisticCommentId: string,
+  serverComment: PullRequestReviewCommentFragment
+): PullRequest {
+  // Create a deep copy to avoid mutating the original
+  const updatedPullRequest = {...pullRequest};
+  
+  // Update the comment in reviewThreads
+  if (updatedPullRequest.reviewThreads?.nodes) {
+    updatedPullRequest.reviewThreads = {
+      ...updatedPullRequest.reviewThreads,
+      nodes: updatedPullRequest.reviewThreads.nodes.map(thread => {
+        if (thread?.comments?.nodes) {
+          const hasOptimisticComment = thread.comments.nodes.some(
+            comment => comment?.id === optimisticCommentId
+          );
+          
+          if (hasOptimisticComment) {
+            return {
+              ...thread,
+              comments: {
+                ...thread.comments,
+                nodes: thread.comments.nodes.map(comment => {
+                  if (comment?.id === optimisticCommentId) {
+                    // Replace optimistic comment with server data
+                    return serverComment;
+                  }
+                  return comment;
+                }),
+              },
+            };
+          }
+        }
+        return thread;
+      }),
+    };
+  }
+  
+  // Update the comment in timeline items
+  if (updatedPullRequest.timelineItems?.nodes) {
+    updatedPullRequest.timelineItems = {
+      ...updatedPullRequest.timelineItems,
+      nodes: updatedPullRequest.timelineItems.nodes.map(item => {
+        if (item?.__typename === 'PullRequestReview' && item.comments?.nodes) {
+          const hasOptimisticComment = item.comments.nodes.some(
+            comment => comment?.id === optimisticCommentId
+          );
+          
+          if (hasOptimisticComment) {
+            return {
+              ...item,
+              comments: {
+                ...item.comments,
+                nodes: item.comments.nodes.map(comment => {
+                  if (comment?.id === optimisticCommentId) {
+                    // Replace optimistic comment with server data
+                    return serverComment;
+                  }
+                  return comment;
+                }),
+              },
+            };
+          }
+        }
+        return item;
+      }),
+    };
+  }
+  
+  return updatedPullRequest;
+}
 
 type Props = {
   line: number;
@@ -28,16 +109,16 @@ export default function PullRequestNewCommentInput({line, path, side}: Props): R
   const onCancel = useResetRecoilState(gitHubPullRequestNewCommentInputCell);
   const refreshPullRequest = useRefreshPullRequest();
   const addComment = useRecoilCallback<[string], Promise<void>>(
-    ({snapshot}) =>
+    ({snapshot, set}) =>
       async comment => {
         const client = snapshot.getLoadable(gitHubClient).valueMaybe();
         if (client == null) {
           return Promise.reject('client not found');
         }
 
-        const pullRequestId = snapshot.getLoadable(gitHubPullRequest).valueMaybe()?.id;
-        if (pullRequestId == null) {
-          return Promise.reject('pull request id not found');
+        const pullRequest = snapshot.getLoadable(gitHubPullRequest).valueMaybe();
+        if (pullRequest == null) {
+          return Promise.reject('pull request not found');
         }
 
         const comparableVersions = snapshot
@@ -58,21 +139,160 @@ export default function PullRequestNewCommentInput({line, path, side}: Props): R
           return Promise.reject('positionForLine not found');
         }
 
-        await client.addPullRequestReviewComment({
-          body: comment,
-          commitOID: commitID,
+        const usernameLoadable = snapshot.getLoadable(gitHubUsername);
+        const username = usernameLoadable.state === 'hasValue' ? usernameLoadable.contents : 'unknown';
+
+        // Create optimistic comment for UI
+        const optimisticCommentId = `temp_${Date.now()}`;
+        const optimisticComment = {
+          __typename: 'PullRequestReviewComment' as const,
+          id: optimisticCommentId,
+          author: {
+            __typename: 'User' as const,
+            id: `temp_user_${Date.now()}`,
+            login: username || 'unknown',
+            avatarUrl: `https://github.com/${username || 'unknown'}.png`,
+          },
+          originalCommit: {
+            __typename: 'Commit' as const,
+            oid: commitID,
+          },
           path,
+          state: PullRequestReviewCommentState.Submitted,
+          outdated: false,
+          originalPosition: position,
           position,
-          pullRequestId,
-        });
+          bodyHTML: `<p>${comment}</p>`,
+          replyTo: null,
+          commit: {
+            __typename: 'Commit' as const,
+            oid: commitID,
+          },
+        };
+
+        // Create optimistic review thread
+        const optimisticThread = {
+          __typename: 'PullRequestReviewThread' as const,
+          id: `temp_thread_${Date.now()}`,
+          originalLine: line,
+          diffSide: side,
+          comments: {
+            __typename: 'PullRequestReviewCommentConnection' as const,
+            nodes: [optimisticComment],
+          },
+        };
+
+        // Find existing pending review or create a new one for the timeline
+        const existingPendingReview = (pullRequest.timelineItems.nodes ?? []).find(
+          item => item?.__typename === 'PullRequestReview' && item.state === PullRequestReviewState.Pending
+        );
+        
+        let timelineItems;
+        if (existingPendingReview && existingPendingReview.__typename === 'PullRequestReview') {
+          // Add comment to existing pending review
+          timelineItems = {
+            ...pullRequest.timelineItems,
+            nodes: (pullRequest.timelineItems.nodes ?? []).map(item => {
+              if (item === existingPendingReview && item.__typename === 'PullRequestReview') {
+                return {
+                  ...item,
+                  comments: {
+                    ...item.comments,
+                    nodes: [...(item.comments.nodes ?? []), optimisticComment],
+                  },
+                };
+              }
+              return item;
+            }),
+          };
+        } else {
+          // Create a new pending review timeline item
+          const optimisticReviewId = `temp_review_${Date.now()}`;
+          const optimisticReview = {
+            __typename: 'PullRequestReview' as const,
+            id: optimisticReviewId,
+            author: {
+              __typename: 'User' as const,
+              id: `temp_user_${Date.now()}`,
+              login: username || 'unknown',
+              avatarUrl: `https://github.com/${username || 'unknown'}.png`,
+            },
+            state: PullRequestReviewState.Pending,
+            bodyHTML: '',
+            comments: {
+              __typename: 'PullRequestReviewCommentConnection' as const,
+              nodes: [optimisticComment],
+            },
+          };
+          
+          timelineItems = {
+            ...pullRequest.timelineItems,
+            nodes: [...(pullRequest.timelineItems.nodes ?? []), optimisticReview],
+          };
+        }
+
+        // Add optimistic comment to UI immediately (both reviewThreads and timeline)
+        const updatedPullRequest = {
+          ...pullRequest,
+          reviewThreads: {
+            ...pullRequest.reviewThreads,
+            nodes: [...(pullRequest.reviewThreads.nodes ?? []), optimisticThread],
+          },
+          timelineItems,
+        } as PullRequest;
+        set(gitHubPullRequest, updatedPullRequest);
+
+        // Trigger scroll to bottom to show the new comment in the right sidebar
+        set(timelineScrollToBottom, Date.now());
 
         // Note that onCancel() will reset gitHubPullRequestNewCommentInputCell
         // to null, which will result in this component being removed from the
         // DOM.
         onCancel();
-        refreshPullRequest();
+
+        try {
+          console.log('🚀 Starting API call for inline comment...');
+          const result = await client.addPullRequestReviewComment({
+            body: comment,
+            commitOID: commitID,
+            path,
+            position,
+            pullRequestId: pullRequest.id,
+          });
+
+          console.log('✅ API call succeeded, updating optimistic comment with server data...');
+          // Extract server comment data from the response
+          const serverComment = result.addPullRequestReviewComment?.comment;
+          
+          if (serverComment) {
+            // Update the optimistic comment with server data in place (no UI refresh)
+            const pullRequestWithServerData = updateOptimisticCommentWithServerData(
+              updatedPullRequest as PullRequest,
+              optimisticCommentId,
+              serverComment
+            );
+            
+            // Quietly update the state with server data - no visual change
+            set(gitHubPullRequest, pullRequestWithServerData);
+            
+            // Trigger scroll again to ensure the comment is visible after server update
+            set(timelineScrollToBottom, Date.now());
+            
+            console.log('🔄 Optimistic comment updated with server data (no refresh!)');
+          } else {
+            console.warn('⚠️ Server response missing comment data, keeping optimistic comment');
+          }
+          
+          // Note: We don't refresh here to avoid full component re-render.
+          // The pending review state will be handled by the optimistic updates above.
+        } catch (error) {
+          // Rollback optimistic update on failure
+          console.log('❌ API call failed, rolling back optimistic comment...');
+          set(gitHubPullRequest, pullRequest);
+          throw error;
+        }
       },
-    [line, onCancel, path, refreshPullRequest, side],
+    [line, onCancel, path, side, refreshPullRequest],
   );
 
   return (

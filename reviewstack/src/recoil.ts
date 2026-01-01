@@ -38,7 +38,7 @@ import type {LineToPosition} from './lineToPosition';
 import type {RecoilValueReadOnly} from 'recoil';
 
 import {lineToPosition} from './diffServiceClient';
-import {DiffSide, PullRequestReviewState, UserHomePageQuery} from './generated/graphql';
+import {DiffSide, PullRequestReviewState, PullRequestState, UserHomePageQuery} from './generated/graphql';
 import CachingGitHubClient, {openDatabase} from './github/CachingGitHubClient';
 import GraphQLGitHubClient from './github/GraphQLGitHubClient';
 import {diffCommits, diffCommitWithParent} from './github/diff';
@@ -168,7 +168,30 @@ export const gitHubPullRequestPendingReviewID = selector<ID | null>({
       item =>
         item?.__typename === 'PullRequestReview' && item.state === PullRequestReviewState.Pending,
     ) as PullRequestReviewItem;
-    return pendingReview?.id ?? null;
+    
+    const reviewId = pendingReview?.id ?? null;
+    
+    // Filter out temporary optimistic IDs for API calls - only return real GitHub review IDs
+    if (reviewId && (reviewId.startsWith('temp_review_') || reviewId.startsWith('temp_'))) {
+      return null;
+    }
+    
+    return reviewId;
+  },
+});
+
+// Helper selector to check if there are any pending reviews (including optimistic ones)
+export const gitHubPullRequestHasPendingReview = selector<boolean>({
+  key: 'gitHubPullRequestHasPendingReview',
+  get: ({get}) => {
+    const pullRequest = get(gitHubPullRequest);
+    const pendingReview = (pullRequest?.timelineItems?.nodes ?? []).find(
+      item =>
+        item?.__typename === 'PullRequestReview' && item.state === PullRequestReviewState.Pending,
+    ) as PullRequestReviewItem;
+    
+    // Return true if there's any pending review, including optimistic ones
+    return pendingReview != null;
   },
 });
 
@@ -612,6 +635,11 @@ export const gitHubPullRequestNewCommentInputCallbacks = selector<NewCommentInpu
             gitHubPullRequestCanAddComment({lineNumber, path, side}),
           );
           if (canAddCommentLoadable.state !== 'hasValue' || !canAddCommentLoadable.contents) {
+            // Check if the PR is merged to show a helpful message
+            const pullRequest = snapshot.getLoadable(gitHubPullRequest).valueMaybe();
+            if (pullRequest?.state === PullRequestState.Merged) {
+              console.warn('Cannot add inline comments to merged pull requests. Use the Submit button at the bottom to add timeline comments instead.');
+            }
             return;
           }
 
@@ -654,6 +682,11 @@ export const gitHubPullRequestCanAddComment = selectorFamily<
     ({get}) => {
       const pullRequest = get(gitHubPullRequest);
       if (pullRequest == null || lineNumber == null) {
+        return false;
+      }
+
+      // Don't allow inline comments on merged PRs (maintain GitHub's default behavior)
+      if (pullRequest.state === PullRequestState.Merged) {
         return false;
       }
 

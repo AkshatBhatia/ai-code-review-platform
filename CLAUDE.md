@@ -5,7 +5,7 @@ This file contains important information for Claude's future development session
 
 
 
-## GitHub Authentication Token
+## GitHub Authentication Tok
 
 **For Local Development (`localhost:3000`):**
 - Token stored in: `.github-token` (see file below)
